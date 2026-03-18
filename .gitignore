@@ -1,0 +1,39 @@
+# ── Abhängigkeiten ────────────────────────────────────────────────────────────
+node_modules/
+
+# ── Build-Ausgabe (electron-builder) ─────────────────────────────────────────
+dist/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# ── Laufzeit-Daten & Crash-Reports ───────────────────────────────────────────
+*.AppImage
+*.exe
+*.deb
+*.rpm
+*.snap
+
+# ── Sensible Konfiguration (darf NICHT ins Repo) ─────────────────────────────
+# API-Keys, die die App lokal im userData-Ordner speichert –
+# falls jemand die Dateien versehentlich ins Projektverzeichnis legt:
+api-keys.json
+google-keys.json
+.env
+.env.*
+
+# ── Betriebssystem ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDEs & Editoren ───────────────────────────────────────────────────────────
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -1,0 +1,1073 @@
+/* ═══════════════════════════════════════════════════════════════
+   Blickfang · style.css
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Design-Tokens ─────────────────────────────────────────── */
+:root {
+  --accent:        #4361ee;
+  --accent-h:      #3451d1;
+  --accent-light:  #eef0ff;
+  --bg:            #f4f5f9;
+  --surface:       #ffffff;
+  --border:        #dde1f0;
+  --text:          #1a1d2e;
+  --muted:         #6b7294;
+  --shadow-sm:     0 1px 4px rgba(0,0,0,.08);
+  --shadow-md:     0 4px 20px rgba(0,0,0,.11);
+  --shadow-lg:     0 12px 44px rgba(0,0,0,.16);
+  --r:             10px;
+  --header-h:      60px;
+  --bar-h:         50px;
+  --toolbar-h:     58px;
+  --frame-head-h:  36px;
+  --snap-c:        #4361ee;
+}
+
+/* ── Reset ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%; overflow: hidden;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 14px; color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+button { cursor: pointer; font: inherit; }
+input  { font: inherit; }
+svg    { flex-shrink: 0; display: block; }
+
+/* ── Header ─────────────────────────────────────────────────── */
+#header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: var(--header-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 20px;
+  /* Ermöglicht Fenster-Drag auf der leeren Fläche des Headers */
+  -webkit-app-region: drag;
+}
+#header > * { -webkit-app-region: no-drag; }
+
+.logo {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 15px; font-weight: 700; letter-spacing: -.01em;
+  color: var(--accent); white-space: nowrap;
+}
+
+#url-form {
+  flex: 1; display: flex; align-items: center; gap: 10px;
+  max-width: 780px;
+}
+
+.url-wrap {
+  flex: 1; height: 38px;
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg); border: 1.5px solid var(--border);
+  border-radius: 8px; padding: 0 10px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.url-wrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(67,97,238,.14);
+}
+.url-icon { color: var(--muted); }
+
+#url-input {
+  flex: 1; border: none; background: transparent; outline: none;
+  font-size: 13.5px; color: var(--text); min-width: 0;
+}
+#url-input::placeholder { color: var(--muted); }
+
+.icon-btn {
+  background: none; border: none; padding: 4px;
+  color: var(--muted); border-radius: 5px; line-height: 0;
+  transition: color .12s, background .12s;
+}
+.icon-btn:hover { color: var(--text); background: var(--border); }
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 36px; padding: 0 16px; border-radius: 8px; border: none;
+  font-size: 13.5px; font-weight: 600; white-space: nowrap;
+  transition: background .15s, box-shadow .15s, transform .08s;
+}
+.btn:active { transform: scale(.97); }
+
+.btn-primary {
+  background: var(--accent); color: #fff;
+  box-shadow: 0 2px 8px rgba(67,97,238,.32);
+}
+.btn-primary:hover { background: var(--accent-h); box-shadow: 0 3px 14px rgba(67,97,238,.42); }
+
+.btn-ghost {
+  background: transparent; color: var(--text);
+  border: 1.5px solid var(--border);
+}
+.btn-ghost:hover { background: var(--bg); border-color: #c5c9de; }
+
+.btn-cam {
+  background: #1a1d2e; color: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+.btn-cam:hover { background: #282c47; }
+
+/* ── Device-Bar ──────────────────────────────────────────────── */
+#device-bar {
+  position: fixed;
+  top: var(--header-h); left: 0; right: 0; z-index: 90;
+  height: var(--bar-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 20px; overflow-x: auto;
+}
+#device-bar::-webkit-scrollbar { height: 0; }
+
+/* ── Scale-Slider (rechts in der Device-Bar) ──────────────────────────── */
+.scale-wrap {
+  margin-left: auto;    /* drückt Slider nach rechts */
+  display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0; padding-left: 16px;
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+}
+#scale-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 110px; height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) calc(var(--pct, 100) * 1%),
+    var(--border)  calc(var(--pct, 100) * 1%)
+  );
+  outline: none; cursor: pointer;
+}
+#scale-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+  cursor: pointer;
+}
+.scale-val {
+  font-size: 11.5px; font-weight: 700; letter-spacing: .04em;
+  color: var(--muted); min-width: 34px; text-align: right;
+}
+
+/* ── Snap-Toggle ──────────────────────────────────────────────────────── */
+.snap-toggle {
+  display: flex; align-items: center; gap: 7px;
+  cursor: pointer; user-select: none;
+  padding-left: 14px; border-left: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.snap-toggle input { display: none; }
+.snap-track {
+  width: 28px; height: 16px; border-radius: 8px;
+  background: var(--border); position: relative;
+  transition: background .15s;
+}
+.snap-toggle input:checked ~ .snap-track { background: var(--accent); }
+.snap-thumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #fff; transition: left .15s;
+}
+.snap-toggle input:checked ~ .snap-track .snap-thumb { left: 14px; }
+.snap-text { font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted); white-space: nowrap; }
+
+.bar-label {
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted); white-space: nowrap;
+}
+
+#chips { display: flex; gap: 6px; align-items: center; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px;
+  border: 1.5px solid var(--border); border-radius: 20px;
+  background: var(--surface); color: var(--text);
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.chip:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+.chip.active {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.chip.active .chip-size { color: rgba(255,255,255,.7); }
+
+.chip-size {
+  font-size: 11px; color: var(--muted);
+  background: var(--bg); padding: 1px 6px; border-radius: 10px;
+  margin-left: 2px;
+}
+.chip.active .chip-size { background: rgba(255,255,255,.18); }
+
+.chip-add {
+  border-style: dashed; color: var(--muted);
+}
+.chip-add:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); border-style: solid; }
+
+/* ── Welcome ─────────────────────────────────────────────────── */
+#welcome {
+  position: fixed;
+  top: calc(var(--header-h) + var(--bar-h));
+  bottom: 0; left: 0; right: 0;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50; overflow-y: auto; padding: 28px;
+}
+
+.welcome-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-md);
+  padding: 44px 52px;
+  max-width: 600px; width: 100%;
+  text-align: center;
+}
+.welcome-illo { margin-bottom: 26px; display: flex; justify-content: center; }
+.welcome-card h1 {
+  font-size: 22px; font-weight: 700; margin-bottom: 12px;
+}
+.welcome-card > p {
+  font-size: 15px; color: var(--muted); line-height: 1.65;
+  margin-bottom: 30px;
+}
+.welcome-card > p strong { color: var(--text); }
+
+.steps {
+  list-style: none; text-align: left;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.steps li {
+  display: flex; align-items: flex-start; gap: 14px;
+  font-size: 14px; color: var(--muted); line-height: 1.55;
+}
+.steps li strong { color: var(--text); }
+
+.step-n {
+  flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent-light); color: var(--accent);
+  font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 1px;
+}
+
+/* ── Workspace ───────────────────────────────────────────────── */
+#workspace {
+  position: fixed;
+  top: calc(var(--header-h) + var(--bar-h));
+  bottom: var(--toolbar-h);
+  left: 0; right: 0;
+  overflow: hidden;
+  background: var(--bg);
+  background-image: radial-gradient(circle, #c5c9de 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+#workspace.hidden { display: none; }
+
+/* Desktop-WebView: position:fixed mit identischen Bounds wie #workspace –
+   kein Containing-Block-Umweg über den parent, direkt am Viewport verankert */
+#desktop-wv {
+  position: fixed;
+  top: calc(var(--header-h) + var(--bar-h));
+  bottom: var(--toolbar-h);
+  left: 0;
+  right: 0;
+  border: none;
+  background: #fff;
+  z-index: 1;
+}
+
+/* ── Panel-Dekoration ────────────────────────────────────────── */
+.panel-deco {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.10);  /* Skalierung immer von der oberen linken Ecke aus */
+  transform-origin: top left;
+  will-change: transform;
+}
+.panel-deco.on-top { z-index: 20; }
+
+/* Drag-Zustand: Inhalt kurz ausgeblendet, Rahmen + Schraffur bleibt */
+.panel-deco.dragging {
+  opacity: 0.88;
+  cursor: grabbing !important;
+}
+.panel-deco.dragging::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 6px,
+    rgba(67,97,238,.07) 6px,
+    rgba(67,97,238,.07) 12px
+  );
+  pointer-events: none;
+}
+
+/* Fokus-Modus */
+#workspace.focus-mode .panel-deco:not(.focused) { display: none; }
+#workspace.focus-mode .panel-deco.focused       { z-index: 30; }
+
+/* ── Gerätespezifische Rahmen ────────────────────────────────── */
+.panel-deco[data-device="iphone"],
+.panel-deco[data-device="android"] {
+  background: #1c1c1e;
+  border-radius: 46px;
+  box-shadow: 0 0 0 1px #48484a, 0 24px 70px rgba(0,0,0,.5),
+              inset 0 0 0 1px #3a3a3c;
+}
+.panel-deco[data-device="tablet"] {
+  background: #1c1c1e;
+  border-radius: 24px;
+  box-shadow: 0 0 0 1px #48484a, 0 20px 60px rgba(0,0,0,.45),
+              inset 0 0 0 1px #3a3a3c;
+}
+.panel-deco[data-device="desktop"] {
+  box-shadow: 0 4px 24px rgba(0,0,0,.22), 0 0 0 1px rgba(0,0,0,.08);
+}
+.panel-deco[data-device="laptop"] {
+  background: #1c1c22;
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px #3a3a44, 0 24px 70px rgba(0,0,0,.5),
+              inset 0 0 0 1px #2e2e38;
+}
+
+/* ── Titelleiste (unsichtbare Drag-Zone) ─────────────────────── */
+.panel-titlebar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: var(--frame-head-h);
+  pointer-events: all;
+  cursor: grab;
+  user-select: none;
+  background: transparent;
+  border-radius: 8px 8px 0 0;
+  z-index: 2;
+}
+
+/* ── Panel-WebView (füllt den Viewport innerhalb des Geräterahmens) ─────── */
+/* Wrapper: positioniert den Inhaltsbereich absolut im Deko-Rahmen          */
+.panel-viewport {
+  position: absolute;
+  top:    calc(var(--frame-head-h) + var(--ft, 0px));
+  left:   var(--fl, 0px);
+  right:  var(--fr, 0px);
+  bottom: var(--fb, 0px);
+  overflow: hidden;
+  z-index: 1;
+}
+/* Webview: absolut im Wrapper verankert → height:100% klappt immer */
+.panel-webview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  pointer-events: all;
+}
+.panel-titlebar:active { cursor: grabbing; }
+[data-device="iphone"] .panel-titlebar,
+[data-device="android"] .panel-titlebar { border-radius: 44px 44px 0 0; }
+[data-device="tablet"]  .panel-titlebar { border-radius: 22px 22px 0 0; }
+[data-device="laptop"]  .panel-titlebar {
+  background: linear-gradient(to bottom, #2a2a34, #22222c);
+  border-radius: 12px 12px 0 0;
+}
+
+/* ── Panel-Titelzeile (sichtbarer Gerätename) ────────────────── */
+.panel-titlelabel {
+  position: absolute;
+  left: 0; right: 0; top: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+[data-device="laptop"] .panel-titlelabel { color: rgba(255,255,255,0.50); }
+
+/* Inline-Rename-Input in der Titelzeile */
+.panel-titlelabel-edit {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.90);
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  width: 100px;
+  text-align: center;
+  outline: none;
+}
+
+/* ── Geräterahmen oben (Notch-Bereich) ──────────────────────── */
+.panel-device-top {
+  position: absolute;
+  top: var(--frame-head-h);
+  left: 0; right: 0;
+  height: var(--ft, 0px);
+  pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  z-index: 2;               /* über der webview */
+}
+/* Dynamic Island – iPhone */
+.device-island {
+  display: none;
+  width: 96px; height: 30px;
+  background: #000; border-radius: 20px;
+  margin-top: 4px;
+}
+[data-device="iphone"] .device-island { display: block; }
+/* Kamera-Punkt – Android + Tablet */
+.device-camera {
+  display: none;
+  width: 8px; height: 8px;
+  background: #3a3a3c; border-radius: 50%;
+}
+[data-device="android"] .device-camera,
+[data-device="tablet"]  .device-camera,
+[data-device="laptop"]  .device-camera { display: block; }
+
+/* ── Geräterahmen unten (Home-Indicator) ────────────────────── */
+.panel-device-bot {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: var(--fb, 0px);
+  pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2;               /* über der webview */
+}
+.device-home {
+  display: none;
+  width: 100px; height: 4px;
+  background: #636366; border-radius: 2px;
+}
+[data-device="iphone"] .device-home,
+[data-device="android"] .device-home { display: block; }
+[data-device="tablet"]  .device-home  { display: block; width: 70px; }
+/* Laptop: Trackpad-Anzeiger im unteren Bezel */
+[data-device="laptop"]  .device-home  {
+  display: block;
+  width: 62px; height: 38px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 6px;
+}
+[data-device="laptop"] .panel-device-bot {
+  background: linear-gradient(to bottom, #252530, #1e1e28);
+  border-radius: 0 0 12px 12px;
+}
+
+/* ── Resize-Handle ───────────────────────────────────────────── */
+.panel-resize {
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 20px; height: 20px;
+  cursor: se-resize; pointer-events: all;
+  display: flex; align-items: flex-end; justify-content: flex-end;
+  padding: 4px;
+}
+.panel-resize svg { pointer-events: none; color: #fff; opacity: .45; }
+[data-device="desktop"] .panel-resize svg { color: var(--muted); opacity: .6; }
+[data-device="laptop"]  .panel-resize svg { color: rgba(255,255,255,.55); opacity: 1; }
+
+/* ── Panel-HUD (erscheint beim Hover \u00fcber dem Ger\u00e4t) ─────────────────── */
+.panel-hud {
+  position: absolute;
+  top: calc(var(--frame-head-h) + var(--ft, 0px) + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px) scale(0.94);
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 8px;
+  background: rgba(14, 14, 20, 0.78);
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 28px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.40), 0 1px 0 rgba(255,255,255,0.06) inset;
+  pointer-events: all;
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 100;
+  white-space: nowrap;
+  user-select: none;
+}
+.panel-deco.hud-visible .panel-hud {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+/* W\u00e4hrend Screenshot: HUD ausblenden */
+body.screenshot-mode .panel-hud { opacity: 0 !important; pointer-events: none !important; }
+
+.hud-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.02em;
+  padding: 0 6px 0 4px;
+}
+.hud-sep {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.14);
+  margin: 0 5px;
+  flex-shrink: 0;
+}
+.hud-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.70);
+  transition: background 0.13s, color 0.13s;
+  flex-shrink: 0;
+}
+.hud-btn:hover {
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+}
+.hud-btn.hud-close:hover {
+  background: rgba(255, 65, 65, 0.22);
+  color: #ff6b6b;
+}
+
+/* ── Zoom-Badge in der URL-Leiste ───────────────────────────── */
+.zoom-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+  background: var(--accent-light);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.zoom-step {
+  width: 24px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none;
+  font-size: 16px; font-weight: 700; line-height: 1;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 0.12s;
+  padding: 0;
+}
+.zoom-step:hover { background: rgba(67,97,238,.18); }
+.zoom-badge {
+  font-size: 11.5px; font-weight: 700;
+  color: var(--accent);
+  cursor: pointer;
+  user-select: none;
+  border: none; background: none;
+  padding: 0 5px;
+  line-height: 1;
+  white-space: nowrap;
+  min-width: 36px;
+  text-align: center;
+  transition: color 0.15s;
+}
+.zoom-badge:hover { text-decoration: underline; }
+
+/* ── HUD – Zoom-Anzeige (veraltet, wird nicht mehr verwendet) ── */
+.hud-zoom {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.40);
+  letter-spacing: 0.04em;
+  min-width: 30px;
+  text-align: center;
+  pointer-events: none;
+  padding: 0 1px;
+}
+
+/* ── HUD – Label-Edit-Input ──────────────────────────────────── */
+.hud-label-edit {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.90);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 5px;
+  width: 90px;
+  text-align: center;
+  outline: none;
+  letter-spacing: 0.02em;
+}
+
+/* ── Lade-Spinner ────────────────────────────────────────────── */
+.panel-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.80);
+  z-index: 5;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.panel-loading.hidden { display: none; }
+
+.spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* dunkler Hintergrund für Mobilgeräte-Panels */
+[data-device="iphone"] .panel-loading,
+[data-device="android"] .panel-loading,
+[data-device="tablet"] .panel-loading {
+  background: rgba(28, 28, 30, 0.72);
+}
+[data-device="iphone"] .spinner,
+[data-device="android"] .spinner,
+[data-device="tablet"] .spinner {
+  border-color: rgba(255, 255, 255, 0.20);
+  border-top-color: rgba(255, 255, 255, 0.80);
+}
+
+/* ── Präsentationsmodus ─────────────────────────────────────── */
+body.presentation #header,
+body.presentation #device-bar,
+body.presentation #toolbar { display: none !important; }
+
+body.presentation #workspace,
+body.presentation #desktop-wv {
+  top: 0 !important;
+  bottom: 0 !important;
+}
+
+body.presentation #welcome {
+  top: 0 !important;
+  bottom: 0 !important;
+}
+
+/* Panel-HUDs bleiben im Präsentationsmodus sichtbar */
+body.presentation .panel-hud { /* keine Änderung nötig */ }
+
+/* Kleiner Exit-Hinweis: erscheint wenn die Maus an den oberen Rand fährt */
+#presentation-hint {
+  position: fixed;
+  top: 0; left: 50%;
+  transform: translateX(-50%) translateY(-100%);
+  background: rgba(14, 14, 20, 0.88);
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 0 0 14px 14px;
+  padding: 7px 22px 9px;
+  color: rgba(255,255,255,.72);
+  font-size: 12px; font-weight: 500; letter-spacing: 0.03em;
+  z-index: 9999;
+  pointer-events: all;
+  cursor: pointer;
+  transition: transform 0.22s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+#presentation-hint:hover { color: #fff; background: rgba(14,14,20,.96); }
+/* Im Präsentationsmodus immer sichtbar (nicht nur bei Hover) */
+body.presentation #presentation-hint {
+  transform: translateX(-50%) translateY(0);
+}
+body.presentation.show-exit-hint #presentation-hint {
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Präsentationsbutton »aktiv«-Zustand */
+#present-btn.active { color: var(--accent); }
+
+/* ── Snap-Linien ─────────────────────────────────────────────── */
+#snap-guides { position: fixed; inset: 0; pointer-events: none; z-index: 600; }
+
+.sg { position: absolute; background: var(--snap-c); opacity: 0; transition: opacity .08s; }
+.sg.show { opacity: 1; }
+.sg-v { top: 0; bottom: 0; width: 1px; }
+.sg-h { left: 0; right: 0; height: 1px; }
+
+/* ── Toolbar ─────────────────────────────────────────────────── */
+#toolbar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  height: var(--toolbar-h);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 10px rgba(0,0,0,.055);
+}
+#toolbar.hidden { display: none; }
+
+.tb-inner {
+  height: 100%; padding: 0 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.tb-group { display: flex; align-items: center; gap: 12px; }
+.tb-right  { margin-left: auto; }
+
+/* Screenshot-Modus Select */
+#ss-mode {
+  font-size: 13px; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 8px; cursor: pointer; outline: none;
+  transition: border-color .15s;
+}
+#ss-mode:hover, #ss-mode:focus { border-color: var(--accent); }
+
+/* Sync-Toggle: aktiv = Akzentfarbe als Indikator */
+#sync-toggle-row { user-select: none; }
+#sync-toggle-row .tgl-label { font-weight: 600; color: var(--muted); }
+#sync-cb:checked ~ .tgl-track { background: var(--accent); }
+#sync-cb:checked ~ .tgl-track .tgl-thumb { transform: translateX(16px); }
+/* Kleines "LIVE"-Badge wenn Sync aktiv */
+#sync-toggle-row::after {
+  content: 'LIVE';
+  font-size: 9px; font-weight: 700; letter-spacing: .06em;
+  color: #fff; background: var(--accent);
+  padding: 1px 5px; border-radius: 4px;
+  opacity: 0; transition: opacity .15s;
+}
+#sync-toggle-row:has(#sync-cb:checked)::after { opacity: 1; }
+
+/* Toggle */
+.toggle-row {
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer; font-size: 13px; color: var(--muted);
+}
+.toggle-row input { position: absolute; opacity: 0; width: 0; height: 0; }
+.tgl-track {
+  width: 38px; height: 22px; border-radius: 11px;
+  background: var(--border); position: relative; flex-shrink: 0;
+  transition: background .2s;
+}
+.toggle-row input:checked ~ .tgl-track { background: var(--accent); }
+.tgl-thumb {
+  position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: white; box-shadow: 0 1px 4px rgba(0,0,0,.2);
+  transition: transform .2s;
+}
+.toggle-row input:checked ~ .tgl-track .tgl-thumb { transform: translateX(16px); }
+.tgl-label { font-size: 13px; }
+
+.badge {
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  background: var(--bg); border: 1px solid var(--border);
+  padding: 3px 10px; border-radius: 20px;
+}
+
+/* ── Dialog ──────────────────────────────────────────────────── */
+.overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(6,8,22,.44);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+}
+.overlay.hidden { display: none; }
+
+/* Screenshot-Ladeindikator */
+#ss-overlay {
+  position: fixed; inset: 0; z-index: 900;
+  background: rgba(20,22,40,.65);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 14px;
+}
+#ss-overlay.hidden    { display: none; }
+.ss-overlay-inner     { display: flex; align-items: center; gap: 10px; }
+@keyframes spin       { to { transform: rotate(360deg); } }
+.ss-spinner           { animation: spin 1s linear infinite; flex-shrink: 0; }
+
+.dlg {
+  background: var(--surface); border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  width: 400px; max-width: calc(100vw - 40px);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.dlg-head {
+  padding: 18px 20px 14px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.dlg-head h2 { font-size: 16px; font-weight: 700; }
+.dlg-close-btn { color: var(--muted); }
+
+.dlg-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.dlg-row { display: flex; align-items: flex-end; gap: 12px; }
+.dlg-x { font-size: 18px; color: var(--muted); padding-bottom: 7px; }
+
+.field { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+.field label {
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted);
+}
+.field input {
+  height: 38px; border: 1.5px solid var(--border); border-radius: 7px;
+  padding: 0 10px; background: var(--bg); color: var(--text); outline: none;
+  transition: border-color .13s, box-shadow .13s;
+}
+.field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(67,97,238,.14);
+}
+
+.presets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.presets-lbl { font-size: 12px; color: var(--muted); width: 100%; margin-bottom: -2px; }
+.preset {
+  font-size: 12px; padding: 3px 10px; border-radius: 20px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  transition: all .12s;
+}
+.preset:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+
+.dlg-foot {
+  padding: 14px 20px 18px;
+  display: flex; justify-content: flex-end; gap: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Screenshot-Overlay ──────────────────────────────────────── */
+.progress-box {
+  background: var(--surface); border-radius: 14px;
+  box-shadow: var(--shadow-lg); padding: 38px 52px;
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  font-size: 15px; color: var(--muted);
+}
+
+.spinner {
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 3px solid var(--border); border-top-color: var(--accent);
+  animation: spin .75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Toasts ──────────────────────────────────────────────────── */
+/* Im Header-Bereich (top < 110px) sind keine WebContentsViews → immer sichtbar */
+#toasts {
+  position: fixed; top: 10px; right: 18px;
+  z-index: 300; display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  padding: 11px 16px; border-radius: 9px;
+  box-shadow: var(--shadow-md);
+  font-size: 13.5px; font-weight: 500; max-width: 340px;
+  display: flex; align-items: center; gap: 9px;
+  animation: tIn .22s ease;
+}
+.toast.info    { background: #1a1d2e; color: #fff; }
+.toast.success { background: #16a34a; color: #fff; }
+.toast.error   { background: #dc2626; color: #fff; }
+.toast.out     { animation: tOut .2s ease forwards; }
+
+@keyframes tIn  { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+@keyframes tOut { from { opacity:1; } to { opacity:0; transform:translateY(-4px); } }
+
+/* ── Utils ───────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c8cce0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #aeb2c8; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ANNOTATION-OVERLAY
+   ══════════════════════════════════════════════════════════════════════════ */
+
+#annotate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(8, 10, 20, 0.97);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#annotate-overlay.hidden { display: none; }
+
+/* ── Toolbar ─────────────────────────────────────────────────── */
+#annotate-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 14px;
+  height: 54px;
+  min-height: 54px;
+  background: #12152c;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.4);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.at-section {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+.at-divider {
+  width: 1px;
+  height: 28px;
+  background: rgba(255,255,255,0.10);
+  margin: 0 11px;
+  flex-shrink: 0;
+}
+.at-spacer { flex: 1 1 0; min-width: 8px; }
+
+/* Tool-Buttons */
+.at-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 13px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.62);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.at-tool:hover { background: rgba(255,255,255,0.13); color: #fff; }
+.at-tool-active {
+  background: rgba(67,97,238,0.32);
+  color: #8baeff;
+  box-shadow: inset 0 0 0 1.5px rgba(67,97,238,0.55);
+}
+.at-tool span { font-size: 16px; line-height: 1; }
+
+/* Farb-Swatches */
+.at-color {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid transparent;
+  background: var(--c);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.12s, border-color 0.12s;
+}
+.at-color:hover     { transform: scale(1.18); }
+.at-color-active    { border-color: #fff !important; transform: scale(1.22); }
+.at-color-white     { border-color: rgba(255,255,255,0.32); }
+
+/* Slider */
+.at-sl-label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.40);
+  white-space: nowrap;
+  user-select: none;
+}
+.at-slider { width: 74px; cursor: pointer; accent-color: #4361ee; }
+
+/* Aktions-Buttons */
+.at-action {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.09);
+  color: rgba(255,255,255,0.68);
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s, color 0.14s;
+}
+.at-action:hover  { background: rgba(255,255,255,0.16); color: #fff; }
+.at-danger        { color: #ff7070; }
+.at-danger:hover  { background: rgba(255,55,45,0.22); color: #ff4444; }
+.at-save          { background: rgba(67,97,238,0.22); color: #8babff; }
+.at-save:hover    { background: rgba(67,97,238,0.42); color: #c0d0ff; }
+
+/* Checkbox-Label (Mauszeiger-Toggle in der Toolbar) */
+.cb-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted, rgba(255,255,255,0.50));
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.cb-label input[type="checkbox"] {
+  accent-color: var(--accent, #4361ee);
+  cursor: pointer;
+}
+
+/* Hinweistext */
+.at-hint {
+  font-size: 11.5px;
+  color: rgba(255,255,255,0.32);
+  white-space: nowrap;
+  margin-right: 4px;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── Canvas-Bereich ──────────────────────────────────────────── */
+#annotate-canvas-wrap {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 16px;
+}
+
+/* Stack: Größe wird per JS gesetzt (proportional zum Viewport skaliert) */
+#annotate-stack {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 2px;
+  box-shadow:
+    0 10px 48px rgba(0,0,0,0.65),
+    0 0 0 1px rgba(255,255,255,0.055);
+}
+
+#annotate-bg,
+#annotate-draw,
+#annotate-preview {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: block;
+}
+
+#annotate-bg      { border-radius: 2px; }
+#annotate-preview { pointer-events: none; }
+#annotate-draw    { cursor: crosshair; border-radius: 2px; }

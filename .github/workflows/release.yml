@@ -1,0 +1,73 @@
+name: Release AppImage
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write   # für das Erstellen von Releases und Tags
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Node.js ─────────────────────────────────────────────────────────
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # ── Abhängigkeiten ───────────────────────────────────────────────────
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      # ── Linux-Systempakete für electron-builder / AppImage ───────────────
+      - name: Systempakete installieren
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            libgtk-3-0 \
+            libnotify4 \
+            libnss3 \
+            libxss1 \
+            libxtst6 \
+            xdg-utils \
+            libatspi2.0-0 \
+            libsecret-1-0 \
+            fuse \
+            rpm
+
+      # ── Version aus package.json lesen ──────────────────────────────────
+      - name: Version lesen
+        id: pkg
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # ── AppImage bauen ───────────────────────────────────────────────────
+      - name: AppImage bauen
+        run: npm run build:linux
+        env:
+          # Kein GH_TOKEN → electron-builder publiziert nicht selbst;
+          # wir laden das Artefakt manuell hoch (nächster Schritt).
+          NODE_ENV: production
+
+      # ── Release erstellen und AppImage hochladen ─────────────────────────
+      - name: GitHub Release erstellen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.pkg.outputs.version }}-build.${{ github.run_number }}
+          name: v${{ steps.pkg.outputs.version }} (Build ${{ github.run_number }})
+          body: |
+            Automatisch gebaut aus Commit ${{ github.sha }} auf `main`.
+
+            **Änderungen in diesem Commit:**
+            ${{ github.event.head_commit.message }}
+          files: dist/*.AppImage
+          draft: false
+          prerelease: false

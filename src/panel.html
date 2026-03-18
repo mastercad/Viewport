@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self';">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --titlebar-h: 32px;
+      --radius:     8px;
+      --border:     #c8cde0;
+      --bg-title:   #e8eaf4;
+      --text-dim:   #7a7f9a;
+      --dot-red:    #ff5f57;
+      --dot-yel:    #febc2e;
+      --dot-grn:    #28c840;
+      --accent:     #5b6af0;
+    }
+
+    html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+
+    #frame {
+      position: absolute; inset: 0;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      background: #fff;
+      display: flex; flex-direction: column;
+      box-shadow: 0 4px 24px rgba(0,0,0,.18);
+      overflow: hidden;
+    }
+
+    /* ── Titelbar ─────────────────────────────────────────────── */
+    #titlebar {
+      height: var(--titlebar-h);
+      min-height: var(--titlebar-h);
+      background: var(--bg-title);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 6px;
+      padding: 0 8px;
+      -webkit-app-region: drag;          /* gesamte Titelbar verschiebbar */
+      user-select: none; cursor: default;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+
+    .win-dots {
+      display: flex; gap: 5px; align-items: center;
+      -webkit-app-region: no-drag;
+    }
+    .win-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      cursor: pointer; flex-shrink: 0;
+      transition: filter .12s;
+    }
+    .win-dot:hover { filter: brightness(1.15); }
+    .win-dot.red    { background: var(--dot-red); }
+    .win-dot.yellow { background: var(--dot-yel); }
+    .win-dot.green  { background: var(--dot-grn); }
+
+    #panel-label {
+      font: 600 12px/1 system-ui, sans-serif;
+      color: #3a3f5c; flex: 1;
+      text-align: center; pointer-events: none;
+    }
+    #panel-size {
+      font: 11px/1 system-ui, sans-serif;
+      color: var(--text-dim);
+      pointer-events: none;
+    }
+
+    /* ── Webview-Container ────────────────────────────────────── */
+    #content {
+      flex: 1; position: relative; overflow: hidden;
+    }
+
+    webview {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      border: none;
+    }
+
+    /* ── Clone-Overlay für visuellen Sync ─────────────────────── */
+    #clone-overlay {
+      position: absolute; inset: 0;
+      pointer-events: none;
+      opacity: 0; transition: opacity .15s;
+      z-index: 10;
+    }
+    #clone-overlay.visible { opacity: 1; }
+    #clone-overlay img {
+      width: 100%; height: 100%;
+      object-fit: fill;
+      display: block;
+    }
+
+    /* ── Resize-Handle ────────────────────────────────────────── */
+    #resize-handle {
+      position: absolute;
+      bottom: 0; right: 0;
+      width: 18px; height: 18px;
+      cursor: se-resize;
+      -webkit-app-region: no-drag;
+      z-index: 20;
+    }
+    #resize-handle svg { opacity: .4; }
+    #resize-handle:hover svg { opacity: .75; }
+
+    /* ── Fokus-Modus: Titelbar ausblenden ─────────────────────── */
+    body.focus-mode #titlebar { display: none; }
+    body.focus-mode #frame { border-radius: 0; }
+  </style>
+</head>
+<body>
+  <div id="frame">
+    <div id="titlebar">
+      <span class="win-dots">
+        <span class="win-dot red"    id="dot-close"  title="Schließen"></span>
+        <span class="win-dot yellow" id="dot-max"    title="Maximieren"></span>
+        <span class="win-dot green"  id="dot-focus"  title="Fokus-Modus"></span>
+      </span>
+      <span id="panel-label">Panel</span>
+      <span id="panel-size"></span>
+    </div>
+
+    <div id="content">
+      <webview id="wv" src="about:blank"
+        allowpopups
+        webpreferences="contextIsolation=yes, javascript=yes, images=yes">
+      </webview>
+      <div id="clone-overlay"><img id="clone-img" src="" alt=""></div>
+    </div>
+  </div>
+
+  <div id="resize-handle">
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+      <path d="M9 1L1 9M9 5L5 9" stroke="#6b7294" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </div>
+
+  <script src="panel.js"></script>
+</body>
+</html>

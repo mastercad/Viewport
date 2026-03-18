@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; frame-src *;">
+  <title>Blickfang · Viewport</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ══════════════════════════ HEADER ══════════════════════════════════ -->
+  <header id="header">
+
+    <div class="logo" aria-label="Blickfang">
+      <img src="../assets/icon.png" width="26" height="26" alt="" aria-hidden="true" style="border-radius:5px;">
+      <span>Blickfang</span><span style="font-weight:400;opacity:0.45;font-size:11px;margin-left:4px;letter-spacing:.03em;">· Viewport</span>
+    </div>
+
+    <form id="url-form" autocomplete="off">
+      <div id="url-wrap" class="url-wrap">
+        <svg class="url-icon" width="15" height="15" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"/>
+        </svg>
+        <input id="url-input" type="text"
+          placeholder="https://example.com – Adresse eingeben und Enter drücken"
+          spellcheck="false" autocapitalize="none" autocorrect="off"
+          aria-label="Website-Adresse">
+        <button type="button" id="clear-btn" class="icon-btn" aria-label="Eingabe löschen" hidden>
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"
+            stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+            <line x1="2" y1="2" x2="12" y2="12"/><line x1="12" y1="2" x2="2" y2="12"/>
+          </svg>
+        </button>
+      </div>
+      <button type="submit" id="load-btn" class="btn btn-primary">
+        Website laden
+      </button>
+    </form>
+
+    <div id="zoom-ctrl" class="zoom-ctrl" title="Zoom der Hauptansicht (Strg+= / Strg+-)">
+      <button type="button" id="zoom-out" class="zoom-step" aria-label="Verkleinern">−</button>
+      <span id="zoom-badge" class="zoom-badge" title="Zoom zurücksetzen (Strg+0)" role="button" tabindex="0">100%</span>
+      <button type="button" id="zoom-in" class="zoom-step" aria-label="Vergrößern">+</button>
+    </div>
+
+  </header>
+
+  <!-- ══════════════════════════ DEVICE-BAR ══════════════════════════════ -->
+  <div id="device-bar">
+    <span class="bar-label">Ansichten:</span>
+    <div id="chips" role="group" aria-label="Geräteansichten auswählen">
+
+      <button class="chip" data-preset="laptop"
+        data-w="1366" data-h="768" data-label="Laptop"
+        title="Laptop · 1366 × 768 px">
+        <svg width="15" height="14" viewBox="0 0 22 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <rect x="2" y="1" width="18" height="12" rx="1.5"/>
+          <path d="M0 17h22"/>
+        </svg>
+        Laptop
+        <span class="chip-size">1366×768</span>
+      </button>
+
+      <button class="chip" data-preset="tablet"
+        data-w="768" data-h="1024" data-label="Tablet"
+        title="Tablet · 768 × 1024 px">
+        <svg width="11" height="14" viewBox="0 0 16 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <rect x="1" y="1" width="14" height="20" rx="2"/>
+          <circle cx="8" cy="18" r=".8" fill="currentColor" stroke="none"/>
+        </svg>
+        Tablet
+        <span class="chip-size">768×1024</span>
+      </button>
+
+      <button class="chip" data-preset="iphone"
+        data-w="390" data-h="844" data-label="iPhone"
+        title="iPhone · 390 × 844 px">
+        <svg width="9" height="14" viewBox="0 0 12 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <rect x="1" y="1" width="10" height="20" rx="2.5"/>
+          <line x1="4.5" y1="3.2" x2="7.5" y2="3.2"/>
+          <circle cx="6" cy="18.5" r=".7" fill="currentColor" stroke="none"/>
+        </svg>
+        iPhone
+        <span class="chip-size">390×844</span>
+      </button>
+
+      <button class="chip" data-preset="android"
+        data-w="360" data-h="800" data-label="Android"
+        title="Android · 360 × 800 px">
+        <svg width="9" height="14" viewBox="0 0 12 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <rect x="1" y="1" width="10" height="20" rx="2.5"/>
+          <line x1="4" y1="3.2" x2="8" y2="3.2"/>
+        </svg>
+        Android
+        <span class="chip-size">360×800</span>
+      </button>
+
+      <button class="chip chip-add" id="custom-btn" title="Eigene Bildschirmgröße">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <line x1="10" y1="3" x2="10" y2="17"/><line x1="3" y1="10" x2="17" y2="10"/>
+        </svg>
+        Eigene Größe
+      </button>
+
+    </div>
+
+    <!-- Ansichtsgröße-Slider (rechts ausgerichtet via margin-left:auto) -->
+    <div class="scale-wrap" title="Ansichten proportional verkleinern – die Seite rendert weiterhin mit voller Auflösung">
+      <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <rect x="1" y="1" width="8" height="8" rx="1.2"/>
+        <rect x="11" y="11" width="8" height="8" rx="1.2"/>
+        <line x1="9" y1="5" x2="11" y2="5"/><line x1="5" y1="9" x2="5" y2="11"/>
+      </svg>
+      <input id="scale-slider" type="range" min="20" max="100" step="5" value="100"
+        aria-label="Ansichtsgröße">
+      <span id="scale-label" class="scale-val">100%</span>
+    </div>
+
+    <!-- Snap-Toggle -->
+    <label class="snap-toggle" title="Einrasten an Kanten und anderen Panels an/aus">
+      <input type="checkbox" id="snap-cb" checked>
+      <span class="snap-track"><span class="snap-thumb"></span></span>
+      <span class="snap-text">Einrasten</span>
+    </label>
+
+  </div>
+
+  <!-- ══════════════════════════ WELCOME ══════════════════════════════════ -->
+  <div id="welcome">
+    <div class="welcome-card">
+      <div class="welcome-illo" aria-hidden="true">
+        <svg width="160" height="110" viewBox="0 0 160 110" fill="none">
+          <!-- Monitor -->
+          <rect x="4" y="12" width="96" height="66" rx="5" fill="#eef0ff" stroke="#4361ee" stroke-width="2"/>
+          <rect x="9"  y="17" width="86" height="54" rx="3" fill="white"/>
+          <rect x="16" y="24" width="52" height="6" rx="3" fill="#c5caf5"/>
+          <rect x="16" y="34" width="72" height="4" rx="2" fill="#e4e7fb"/>
+          <rect x="16" y="42" width="64" height="4" rx="2" fill="#e4e7fb"/>
+          <rect x="16" y="50" width="68" height="4" rx="2" fill="#e4e7fb"/>
+          <rect x="16" y="58" width="50" height="4" rx="2" fill="#e4e7fb"/>
+          <line x1="52" y1="78" x2="52" y2="88" stroke="#4361ee" stroke-width="2"/>
+          <line x1="36" y1="88" x2="68" y2="88" stroke="#4361ee" stroke-width="2" stroke-linecap="round"/>
+          <!-- Pfeil -->
+          <path d="M104 42 L116 42" stroke="#4361ee" stroke-width="1.6" stroke-dasharray="3 2.5"
+            marker-end="url(#a)" stroke-linecap="round"/>
+          <defs>
+            <marker id="a" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+              <path d="M0 1 L5 3 L0 5 z" fill="#4361ee"/>
+            </marker>
+          </defs>
+          <!-- Phone -->
+          <rect x="118" y="26" width="38" height="68" rx="5" fill="#eef0ff" stroke="#4361ee" stroke-width="2"/>
+          <rect x="122" y="32" width="30" height="52" rx="2" fill="white"/>
+          <line x1="130" y1="28.5" x2="142" y2="28.5" stroke="#4361ee" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="137" cy="80" r="3" fill="#c5caf5"/>
+          <rect x="127" y="38" width="20" height="4"   rx="2"   fill="#c5caf5"/>
+          <rect x="127" y="46" width="22" height="3.5" rx="1.75" fill="#e4e7fb"/>
+          <rect x="127" y="53" width="18" height="3.5" rx="1.75" fill="#e4e7fb"/>
+          <rect x="127" y="60" width="20" height="3.5" rx="1.75" fill="#e4e7fb"/>
+        </svg>
+      </div>
+      <h1>Websites auf allen Geräten gleichzeitig</h1>
+      <p>Gib eine Adresse ein, wähle die gewünschten Geräteansichten – und präsentiere <strong>live</strong>, wie die Seite auf Desktop und Mobil aussieht.</p>
+
+      <ol class="steps">
+        <li>
+          <span class="step-n">1</span>
+          <span>Website-Adresse oben eingeben und <strong>„Website laden"</strong> klicken</span>
+        </li>
+        <li>
+          <span class="step-n">2</span>
+          <span>Weitere Geräteansichten wählen – z. B. <strong>Laptop, Tablet oder iPhone</strong></span>
+        </li>
+        <li>
+          <span class="step-n">3</span>
+          <span>Fenster <strong>frei verschieben</strong> oder per Knopfdruck <strong>automatisch anordnen</strong></span>
+        </li>
+        <li>
+          <span class="step-n">4</span>
+          <span>Mit <strong>Screenshot</strong> alle Ansichten auf einmal oder kombiniert speichern</span>
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════ WORKSPACE ════════════════════════════════ -->
+  <!--
+    Der eigentliche Inhalt jedes Panels ist ein WebContentsView (echter
+    Chromium-Prozess), der vom Main-Prozess direkt ins Fenster eingehängt wird.
+    Hier rendern wir nur die Dekoration (Titelleiste, Rahmen, Resize-Handle).
+  -->
+  <main id="workspace" aria-label="Präsentationsbereich">
+    <webview id="desktop-wv" partition="persist:desktop"
+      src="about:blank" allowpopups></webview>
+  </main>
+
+  <!-- Präsentationsmodus Exit-Hinweis -->
+  <div id="presentation-hint" aria-hidden="true">Esc&nbsp;/&nbsp;F11 · Präsentationsmodus beenden</div>
+
+  <!-- Snap-Hilfslinien -->
+  <div id="snap-guides" aria-hidden="true">
+    <div class="sg sg-v" id="sg-l"></div>
+    <div class="sg sg-v" id="sg-cv"></div>
+    <div class="sg sg-v" id="sg-r"></div>
+    <div class="sg sg-h" id="sg-t"></div>
+    <div class="sg sg-h" id="sg-ch"></div>
+    <div class="sg sg-h" id="sg-b"></div>
+  </div>
+
+  <!-- ══════════════════════════ TOOLBAR (unten) ══════════════════════════ -->
+  <footer id="toolbar" class="hidden">
+    <div class="tb-inner">
+
+      <div class="tb-group">
+        <button id="screenshot-btn" class="btn btn-cam"
+          title="Screenshot aller Ansichten aufnehmen (Strg+P)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+          Screenshot
+        </button>
+
+        <select id="ss-mode" title="Screenshot-Modus">
+          <option value="combined">Nebeneinander</option>
+          <option value="workspace">Workspace-Layout</option>
+          <option value="single">Einzeln</option>
+        </select>
+
+        <button id="annotate-btn" class="btn btn-ghost"
+          title="Screenshot annotieren – Pfeile, Kreise, Lupe">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 20h9"/>
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          Annotieren
+        </button>
+        <label class="cb-label" title="Mauszeiger beim Öffnen in den Screenshot einzeichnen">
+          <input type="checkbox" id="annotate-cursor-cb"> Mauszeiger
+        </label>
+      </div>
+
+      <div class="tb-group tb-right">
+        <label class="toggle-row" id="sync-toggle-row" title="Alle Ansichten beim URL-Laden synchron navigieren (Strg+Shift+S)">
+          <input type="checkbox" id="sync-cb" checked>
+          <span class="tgl-track"><span class="tgl-thumb"></span></span>
+          <span class="tgl-label">Sync</span>
+        </label>
+        <span id="view-count" class="badge">0 Ansichten</span>
+        <button id="arrange-btn" class="btn btn-ghost"
+          title="Fenster automatisch anordnen (Strg+Shift+A)">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none"
+            stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <rect x="1" y="1" width="8" height="8" rx="1"/>
+            <rect x="11" y="1" width="8" height="8" rx="1"/>
+            <rect x="1" y="11" width="8" height="8" rx="1"/>
+            <rect x="11" y="11" width="8" height="8" rx="1"/>
+          </svg>
+          Anordnen
+        </button>
+        <button id="present-btn" class="icon-btn" title="Präsentationsmodus (F11)" aria-label="Präsentationsmodus"
+          style="margin-left:auto;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <path d="M8 21h8M12 17v4"/>
+            <polyline points="9 8 12 11 15 8"/>
+          </svg>
+        </button>
+        <button id="keys-btn" class="icon-btn" title="Google-API-Keys für Push-Notifications" aria-label="Push-Konfiguration">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+          </svg>
+        </button>
+
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- ══════════════════════════ CUSTOM-DIALOG ════════════════════════════ -->
+  <div id="custom-dlg" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="dlg-h">
+    <div class="dlg">
+      <div class="dlg-head">
+        <h2 id="dlg-h">Eigene Bildschirmgröße</h2>
+        <button class="icon-btn dlg-close-btn" id="dlg-close" aria-label="Schließen">
+          <svg width="16" height="16" viewBox="0 0 18 18" fill="none"
+            stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+            <line x1="2" y1="2" x2="16" y2="16"/><line x1="16" y1="2" x2="2" y2="16"/>
+          </svg>
+        </button>
+      </div>
+      <div class="dlg-body">
+        <div class="dlg-row">
+          <div class="field">
+            <label for="f-w">Breite (px)</label>
+            <input type="number" id="f-w" value="1280" min="100" max="3840">
+          </div>
+          <span class="dlg-x">×</span>
+          <div class="field">
+            <label for="f-h">Höhe (px)</label>
+            <input type="number" id="f-h" value="800"  min="100" max="2160">
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-n">Bezeichnung</label>
+          <input type="text" id="f-n" value="Eigene Ansicht" maxlength="24">
+        </div>
+        <div class="presets">
+          <span class="presets-lbl">Schnellauswahl:</span>
+          <button class="preset" data-w="1440" data-h="900">1440 × 900</button>
+          <button class="preset" data-w="1280" data-h="720">1280 × 720</button>
+          <button class="preset" data-w="820"  data-h="1180">iPad Air</button>
+          <button class="preset" data-w="375"  data-h="667">iPhone SE</button>
+          <button class="preset" data-w="412"  data-h="915">Pixel 7</button>
+        </div>
+      </div>
+      <div class="dlg-foot">
+        <button class="btn btn-ghost" id="dlg-cancel">Abbrechen</button>
+        <button class="btn btn-primary" id="dlg-add">Ansicht hinzufügen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════ TOASTS ═══════════════════════════════════ -->
+  <div id="toasts" aria-live="assertive" aria-atomic="true"></div>
+
+  <!-- ══════════════════════════ KEYS-DIALOG ═════════════════════════════ -->
+  <div id="keys-dlg" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="keys-dlg-h">
+    <div class="dlg" style="max-width:500px;">
+      <div class="dlg-head">
+        <h2 id="keys-dlg-h">Push-Notification-Zugangsdaten</h2>
+        <button class="icon-btn" id="keys-dlg-help" title="Wozu brauche ich diese Schlüssel?" aria-label="Hilfe einblenden">
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="10" cy="10" r="9"/>
+            <path d="M7.5 7.5a2.5 2.5 0 0 1 5 0c0 2.5-2.5 2.5-2.5 5"/>
+            <circle cx="10" cy="16.5" r="0.8" fill="currentColor" stroke="none"/>
+          </svg>
+        </button>
+        <button class="icon-btn dlg-close-btn" id="keys-dlg-close" aria-label="Schließen">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>
+        </button>
+      </div>
+      <div id="keys-help-section" class="hidden" style="margin:0 20px 0;padding:12px 14px;background:#f8f9fd;border-radius:8px;border:1px solid #e0e3f0;font-size:12.5px;line-height:1.6;">
+        <p style="margin:0 0 6px"><strong>Warum braucht Blickfang diese Schlüssel?</strong><br>
+        Electron liefert keine Google-API-Schlüssel mit. Ohne sie verweigert Chromium
+        die Push-Registrierung: <code style="background:#eef0ff;padding:1px 4px;border-radius:3px;">Registration failed – push service not available</code></p>
+        <p style="margin:4px 0 2px"><strong>GOOGLE_API_KEY</strong> – Firebase Console → Projekteinstellungen → Allgemein → Web-App → <code>apiKey</code></p>
+        <p style="margin:4px 0 2px"><strong>CLIENT_ID</strong> – Google Cloud Console → APIs &amp; Dienste → Anmeldedaten → OAuth 2.0-Client-ID (Typ: Desktop) → Client-ID</p>
+        <p style="margin:4px 0 0"><strong>CLIENT_SECRET</strong> – dieselbe OAuth-App → Client-Secret</p>
+      </div>
+      <div class="dlg-body" style="line-height:1.6;font-size:13px;">
+        <p>Blickfang leitet diese Zugangsdaten beim Start an Chromium weiter, damit
+        die geladenen Webseiten Push-Notifications empfangen können.<br>
+        Ohne Konfiguration schlägt die Registrierung fehl:
+        <code style="background:#f0f1f8;padding:2px 5px;border-radius:4px;">Registration failed &ndash; push service not available</code></p>
+
+        <div class="dlg-row" style="margin-top:12px;">
+          <label for="k-api" style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">GOOGLE_API_KEY</label>
+          <input type="text" id="k-api" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d0d3e8;border-radius:6px;font-size:13px;" placeholder="AIzaSy..." autocomplete="off" spellcheck="false">
+        </div>
+        <div class="dlg-row" style="margin-top:10px;">
+          <label for="k-cid" style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">GOOGLE_DEFAULT_CLIENT_ID</label>
+          <input type="text" id="k-cid" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d0d3e8;border-radius:6px;font-size:13px;" placeholder="123456789-....apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="dlg-row" style="margin-top:10px;">
+          <label for="k-sec" style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">GOOGLE_DEFAULT_CLIENT_SECRET</label>
+          <input type="text" id="k-sec" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d0d3e8;border-radius:6px;font-size:13px;" placeholder="GOCSPX-..." autocomplete="off" spellcheck="false">
+        </div>
+        <p style="margin-top:12px;color:#6b7294;font-size:12px;">Nach dem Speichern die App <strong>neu starten</strong>,
+        damit die Zugangsdaten wirksam werden.</p>
+      </div>
+      <div class="dlg-foot">
+        <button class="btn btn-ghost" id="keys-dlg-cancel">Abbrechen</button>
+        <button class="btn btn-primary" id="keys-dlg-save">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Screenshot-Ladeindikator -->
+  <div id="ss-overlay" class="hidden" aria-live="polite" aria-label="Screenshots werden erstellt">
+    <div class="ss-overlay-inner">
+      <svg class="ss-spinner" viewBox="0 0 24 24" fill="none" width="24" height="24" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,.3)" stroke-width="3"/>
+        <path d="M12 2a10 10 0 0 1 10 10" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      Screenshots werden erstellt …
+    </div>
+  </div>
+
+  <!-- ══════════════════════════ ANNOTATE-OVERLAY ══════════════════════════ -->
+  <div id="annotate-overlay" class="hidden" role="dialog" aria-modal="true" aria-label="Screenshot annotieren">
+
+    <div id="annotate-toolbar">
+
+      <!-- Werkzeuge -->
+      <div class="at-section" id="annotate-tools" role="group" aria-label="Werkzeuge">
+        <button class="at-tool" data-tool="select"    title="Auswählen / Verschieben (S)">
+          <span aria-hidden="true">✓</span> Auswählen
+        </button>
+        <button class="at-tool at-tool-active" data-tool="arrow"     title="Handgezeichneter Pfeil (A)">
+          <span aria-hidden="true">↗</span> Pfeil
+        </button>
+        <button class="at-tool" data-tool="circle"    title="Fasermaler-Kreis (C)">
+          <span aria-hidden="true">◯</span> Kreis
+        </button>
+        <button class="at-tool" data-tool="magnifier" title="Zoom-Lupe (M)">
+          <span aria-hidden="true">⊕</span> Lupe
+        </button>
+        <button class="at-tool" data-tool="crop" title="Ausschnitt wählen und beim Speichern zuschneiden (K)">
+          <span aria-hidden="true">✂</span> Ausschnitt
+        </button>
+      </div>
+
+      <div class="at-divider"></div>
+
+      <!-- Strichgröße -->
+      <div class="at-section">
+        <label class="at-sl-label" for="annotate-size">Größe</label>
+        <input id="annotate-size" class="at-slider" type="range" min="0.6" max="2.5" step="0.1" value="1">
+      </div>
+
+      <div class="at-divider"></div>
+
+      <!-- Farben -->
+      <div class="at-section" id="annotate-colors" role="group" aria-label="Farbe">
+        <button class="at-color at-color-active" data-color="#FF3B30" style="--c:#FF3B30" title="Rot"></button>
+        <button class="at-color"                 data-color="#FF9F0A" style="--c:#FF9F0A" title="Orange"></button>
+        <button class="at-color"                 data-color="#FFD60A" style="--c:#FFD60A" title="Gelb"></button>
+        <button class="at-color"                 data-color="#34C759" style="--c:#34C759" title="Grün"></button>
+        <button class="at-color"                 data-color="#2979FF" style="--c:#2979FF" title="Blau"></button>
+        <button class="at-color"                 data-color="#BF5AF2" style="--c:#BF5AF2" title="Lila"></button>
+        <button class="at-color"                 data-color="#FF2D55" style="--c:#FF2D55" title="Pink"></button>
+        <button class="at-color at-color-white"  data-color="#FFFFFF" style="--c:#FFFFFF" title="Weiß"></button>
+      </div>
+
+      <div class="at-divider"></div>
+
+      <!-- Lupenzoom -->
+      <div class="at-section">
+        <label class="at-sl-label" for="annotate-zoom">Zoom</label>
+        <input id="annotate-zoom" class="at-slider" type="range" min="1.5" max="5" step="0.5" value="2.5">
+      </div>
+
+      <div class="at-divider"></div>
+
+      <!-- Aktionen links -->
+      <div class="at-section">
+        <button id="annotate-undo"      class="at-action">&#x21A9; Undo</button>
+        <button id="annotate-delete"    class="at-action at-danger" title="Ausgewählte Annotation löschen (Entf)">&#x2715; Auswahl</button>
+        <button id="annotate-crop-reset" class="at-action at-danger hidden" title="Ausschnitt zurücksetzen">&#x2715; Ausschnitt</button>
+        <button id="annotate-crop-save-btn" class="at-action at-save hidden" title="Nur diesen Ausschnitt als PNG speichern">&#x2193; Ausschnitt speichern</button>
+        <button id="annotate-clear-btn" class="at-action at-danger" title="Alle Annotationen löschen">&#x2715; Alle</button>
+      </div>
+
+      <div class="at-spacer"></div>
+
+      <!-- Aktionen rechts + Hinweis -->
+      <div class="at-section">
+        <span id="annotate-hint" class="at-hint">Pfeil: Startpunkt klicken · zur Spitze ziehen</span>
+        <button id="annotate-save"      class="at-action at-save">↓ Speichern</button>
+        <button id="annotate-close-btn" class="at-action">✕ Schließen</button>
+      </div>
+
+    </div>
+
+    <!-- Canvas-Bereich -->
+    <div id="annotate-canvas-wrap">
+      <div id="annotate-stack">
+        <canvas id="annotate-bg"></canvas>
+        <canvas id="annotate-draw"></canvas>
+        <canvas id="annotate-preview"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

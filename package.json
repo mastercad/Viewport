@@ -1,0 +1,36 @@
+{
+  "name": "blickfang",
+  "version": "1.0.0",
+  "description": "Webseiten auf Desktop, Tablet und Mobil gleichzeitig präsentieren – mit Screenshot-Editor und Annotationen",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "de.blickfang.app",
+    "productName": "Blickfang",
+    "directories": { "output": "dist" },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "src/assets/icon.ico"
+    },
+    "linux": {
+      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "icon": "src/assets/icons",
+      "category": "Utility",
+      "executableArgs": ["--no-sandbox"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": ["de_DE", "en_US"],
+      "language": "1031"
+    }
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^24.9.1"
+  }
+}
