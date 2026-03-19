@@ -88,7 +88,7 @@ describe('panelCompositeLayout – Laptop mit Offset-Rect', () => {
 });
 
 describe('panelCompositeLayout – Desktop (kein Frame) bei pScale=1', () => {
-  const { dx, dy, drawW, drawH } = panelCompositeLayout(DESKTOP_RECT, 1, PAD);
+  const { dy, drawW, drawH } = panelCompositeLayout(DESKTOP_RECT, 1, PAD);
 
   it('drawW = 1920', () => expect(drawW).toBe(1920));
   it('drawH = 1080 (ohne FRAME_HEAD_H)', () => expect(drawH).toBe(1080));

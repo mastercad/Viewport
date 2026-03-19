@@ -24,7 +24,7 @@ vi.mock('../src/renderer/editor/render.js', () => ({
   drawAnnotation:    vi.fn(),
 }));
 
-import { state, HANDLE_HIT, HIT_THR } from '../src/renderer/editor/state.js';
+import { state, HIT_THR } from '../src/renderer/editor/state.js';
 import {
   getCropHandles, cropHandleAt, applyCropHandle,
   hitTest, hitTestAll,

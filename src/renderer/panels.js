@@ -257,7 +257,7 @@ export function autoArrange() {
   const PAD = 14;
   const entries = [...state.panels.entries()].sort(([, a], [, b]) => b.rect.h - a.rect.h); // höchste zuerst
   let x = PAD, y = PAD, rowH = 0;
-  for (const [id, p] of entries) {
+  for (const [_id, p] of entries) {
     if (x > PAD && x + p.rect.w > state.wsRect.w - PAD) {
       x = PAD; y += rowH + PAD; rowH = 0;
     }
@@ -509,7 +509,7 @@ function getDeviceEmulationOpts(def) {
   return { mobile, ua };
 }
 
-function createDecoEl(id, def, scale = state.panelScale) {
+function createDecoEl(id, def, _scale = state.panelScale) {
   const el = document.createElement('div');
   el.className      = 'panel-deco';
   el.dataset.id     = id;

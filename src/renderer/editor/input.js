@@ -1,7 +1,7 @@
 import { state, ctx, dom } from './state.js';
 import { cloneAnn, normRect } from './geometry.js';
 import { mkRng, drawMagnifier } from './draw.js';
-import { cropHandleAt, applyCropHandle, hitTestAll, handleAt, applyHandle, applyMove } from './hittest.js';
+import { cropHandleAt, hitTestAll, handleAt, applyHandle, applyMove } from './hittest.js';
 import { renderCropOverlay, renderHandles, redrawAll, drawAnnotation } from './render.js';
 import { pushUndo } from './history.js';
 

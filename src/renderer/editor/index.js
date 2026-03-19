@@ -4,10 +4,10 @@
 import { state, ctx, dom } from './state.js';
 import { normRect } from './geometry.js';
 import { drawCursorIcon, mkRng, drawMagnifier } from './draw.js';
-import { applyCropHandle, cropHandleAt } from './hittest.js';
-import { redrawAll, renderHandles, renderCropOverlay } from './render.js';
-import { pushUndo, undoStep, clearAll, deleteSelected } from './history.js';
-import { onDown, onMove, onUp, onLeave, buildAnnotation } from './input.js';
+import { applyCropHandle } from './hittest.js';
+import { redrawAll, renderHandles } from './render.js';
+import { undoStep, clearAll, deleteSelected } from './history.js';
+import { onDown, onMove, onUp, onLeave } from './input.js';
 
 function setTool(name) {
   state.tool = name;

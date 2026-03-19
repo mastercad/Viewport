@@ -159,7 +159,7 @@ export function drawMarkerCircle(ctx, cx, cy, rx, ry, clr, sm, rng) {
   ctx.restore();
 }
 
-export function drawMagnifier(ctx, bgCv, cx, cy, radius, zoom, clr, sm, rng) {
+export function drawMagnifier(ctx, bgCv, cx, cy, radius, zoom, clr, _sm, _rng) {
   if (radius < 15) return;
 
   // Linienstärken proportional zum Radius – unabhängig von sizeMul

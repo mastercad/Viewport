@@ -161,6 +161,4 @@ var MAIN_WORLD_CODE = /* JavaScript */ `
 // Vorteil gegenüber <script>-Tag: umgeht die Content-Security-Policy der Seite
 // auch dann, wenn diese durch einen Service Worker aus dem Cache bedient wird
 // (SW-Responses gehen nicht durch Electrons webRequest.onHeadersReceived).
-webFrame.executeJavaScript(MAIN_WORLD_CODE).catch(function (e) {
-  console.warn('[Push] Preload-Injektion fehlgeschlagen:', e && e.message);
-});
+webFrame.executeJavaScript(MAIN_WORLD_CODE).catch(function (_e) { /* ignore */ });

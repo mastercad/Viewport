@@ -84,8 +84,8 @@ export async function captureScreenshot() {
     }
     toast('Screenshot gespeichert', 'success');
   } catch (err) {
-    console.error('Screenshot:', err);
     toast('Screenshot fehlgeschlagen', 'error');
+    void err;
   } finally {
     document.body.classList.remove('screenshot-mode');
     workspace.style.pointerEvents = '';
@@ -157,7 +157,6 @@ function blobDownload(canvas, name) {
     canvas.toBlob(blob => {
       const url = URL.createObjectURL(blob);
       const a   = document.createElement('a');
- a      =   
       a.href = url; a.download = name; a.click();
       URL.revokeObjectURL(url);
       res();

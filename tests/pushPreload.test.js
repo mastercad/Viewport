@@ -17,7 +17,7 @@
  *  - _ensureConnected → nur bei vollständigem Key aktiv (>32 Zeichen)
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'fs';
 
 // ── MAIN_WORLD_CODE aus der Quelldatei extrahieren ────────────────────────────
@@ -93,7 +93,6 @@ function buildEnv({
   }
 
   // Code in abgeschlossenem Scope auswerten
-  // eslint-disable-next-line no-new-func
   const fn = new Function(
     'window', 'localStorage', 'PushManager', 'DOMException', 'atob', 'btoa', 'location',
     // Wrapper: IIFE ausführen (enthält bereits die eigene IIFE)
@@ -292,7 +291,7 @@ describe('getSubscription() – LS-Treffer mit altem Cache (kein vapidKey im JSO
   });
 
   it('setzt vapidKey auf den 32-Zeichen-Prefix (Fallback für makeFakeSub)', async () => {
-    const { pm, store, mockLS } = makeEnvWithOldCache();
+    const { pm } = makeEnvWithOldCache();
     const sub = await pm.getSubscription();
     // unsubscribe() nutzt creds.vapidKey.slice(0,32) für removeItem – darf nicht crashen
     await expect(sub.unsubscribe()).resolves.toBe(true);

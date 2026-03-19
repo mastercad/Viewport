@@ -27,7 +27,7 @@
  *     – Format: "{label}_{w}x{h}_{ts}.png" bzw. "{label}_{ts}.png" ohne Maße
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ─── A + B + C: screenshotPanel & captureScreenshot ─────────────────────────
 //
@@ -179,14 +179,14 @@ describe('A: screenshotPanel() – WYSIWYG via captureRect', () => {
 async function captureScreenshotLogic({
   mode,
   hasPanels,
-  desktopResult,
+  desktopResult: _desktopResult,
   captureWorkspaceSnapshot,
   captureDesktopPanel,
   screenshotAllPanels,
   downloadWorkspaceComposite,
   downloadSingle,
-  showOverlay,     // sollte NIE aufgerufen werden
-  hideOverlay,     // sollte NIE aufgerufen werden
+  showOverlay: _showOverlay,
+  hideOverlay: _hideOverlay,
   toast,
 }) {
   if (mode === 'combined') {

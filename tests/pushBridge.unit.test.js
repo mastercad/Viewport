@@ -37,7 +37,6 @@ function extractFn(source, name) {
   for (let i = 0; i < slice.length; i++) {
     if (slice[i] === '{') depth++;
     else if (slice[i] === '}' && --depth === 0) {
-      // eslint-disable-next-line no-eval
       return eval(`(${slice.slice(0, i + 1)})`);
     }
   }
@@ -54,7 +53,6 @@ function extractNotifParser(source) {
   const end = source.indexOf("console.log('[Push] Nachricht empfangen:", start);
   if (end === -1) throw new Error('Ende des Notification-Parsers nicht gefunden');
   const logic = source.slice(start, end).trim();
-  // eslint-disable-next-line no-new-func
   return new Function('notification', `${logic}\nreturn { title, body, icon };`);
 }
 

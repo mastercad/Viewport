@@ -1,11 +1,10 @@
 import { state, normalizeWsRect, clampRect, applyDecoRect } from './state.js';
-import { FRAME_HEAD_H } from './constants.js';
 import { normalizeUrl, toast }        from './utils.js';
 import {
   openPreset, positionSnapGuides,
   navigatePanel, navigateAllPanels,
   autoArrange, toggleMaximize, toggleFocus, removePanel, showWorkspace,
-  isWvReady, addPanel, registerCustomDevice,
+  addPanel, registerCustomDevice,
 } from './panels.js';
 import { wireScreenshot, captureScreenshot } from './screenshot.js';
 import { wireEditor } from './editor/index.js';
@@ -399,7 +398,7 @@ function wireTemplates() {
 }
 function wireIpcEvents() {
   let _navTimer = null; // Debounce: Panel-Sync erst nach Ende der Redirect-Kette
-  window.addEventListener('ss:navigated', ({ detail: { id, url } }) => {
+  window.addEventListener('ss:navigated', ({ detail: { url } }) => {
     if (!url || url === 'about:blank') return;
     urlInput.value = url;
     updateClearBtn();
@@ -584,7 +583,7 @@ function wireDesktopInteraction() {
 
   desktopWv.addEventListener('console-message', e => {
     const msg = e.message ?? '';
-    if (msg.startsWith('__SS_')) console.log('[SS-sync]', msg.slice(0, 120));
+    if (msg.startsWith('__SS_')) return;
 
     if (!syncEnabled) return;
     if (state.panels.size === 0) return;

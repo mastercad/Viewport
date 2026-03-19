@@ -1,8 +1,8 @@
 'use strict';
 
 const wv          = document.getElementById('wv');
-const cloneOverlay= document.getElementById('clone-overlay');
-const cloneImg    = document.getElementById('clone-img');
+const _cloneOverlay= document.getElementById('clone-overlay');
+const _cloneImg    = document.getElementById('clone-img');
 const labelEl     = document.getElementById('panel-label');
 const sizeEl      = document.getElementById('panel-size');
 const dotClose    = document.getElementById('dot-close');
@@ -107,7 +107,7 @@ function loadUrl(url, isSync = false) {
         ).catch(() => { isSyncNav = true; wv.src = url; }); // Fallback
         return;
       }
-    } catch (e) { /* nicht-parsierbare URL → normales Laden */ }
+    } catch { /* nicht-parsierbare URL → normales Laden */ }
   }
 
   if (isLoading) { pendingNav = { url, sync: isSync }; return; }

@@ -1,4 +1,4 @@
-import { state, HANDLE_R, HANDLE_HIT, HIT_THR } from './state.js';
+import { state, HANDLE_HIT, HIT_THR } from './state.js';
 import { normRect, distToSegment } from './geometry.js';
 
 export function getCropHandles() {

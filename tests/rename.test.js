@@ -214,7 +214,7 @@ describe('Panel-Umbenennen – rename handler', () => {
     // Stattdessen prüfen wir, dass wireRename den Listener auf titlebar
     // (nicht titleLabel) registriert hat, indem wir sicherstellen,
     // dass der ursprüngliche titleLabel keinen dblclick-Listener hat.
-    const hasOwnDblclick = titleLabel._renaming !== undefined; // nur _renaming gesetzt, kein Listener
+    const _hasOwnDblclick = titleLabel._renaming !== undefined; // nur _renaming gesetzt, kein Listener
     // Wenn wireRename falsch auf titleLabel registriert hätte, würde der
     // folgende Dispatch das Flag NICHT setzen (in echtem Browser).
     // Im Testrahmen prüfen wir, dass der Listener korrekt auf titlebar sitzt.
