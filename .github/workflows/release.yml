@@ -63,7 +63,7 @@ jobs:
 
       # ── AppImage bauen ─────────────────────────────────────────────────
       - name: AppImage bauen
-        run: npm run build:linux
+        run: npm run build:linux -- --publish never
         env:
           NODE_ENV: production
 
@@ -97,7 +97,7 @@ jobs:
 
       # ── Windows-Installer bauen ────────────────────────────────────────
       - name: Windows-Installer bauen
-        run: npm run build:win
+        run: npm run build:win -- --publish never
         env:
           NODE_ENV: production
 
