@@ -1,27 +1,21 @@
-import { PRESETS, SNAP_THRESH, FRAME_HEAD_H, MIN_W, MIN_H } from './constants.js';
+import { PRESETS, DEVICE_UA, SNAP_THRESH, FRAME_HEAD_H, MIN_W, MIN_H } from './constants.js';
 import { state, clampRect, applyDecoRect }                  from './state.js';
 import { toast }                                              from './utils.js';
 import { saveLayout }                                         from './storage.js';
+import { navigateWvLogic }                                   from './navLogic.js';
 
-/* ── Laufzeitregister für eigene Geräte ───────────────────────── */
-const _customRegistry = new Map(); // id → def
+const _customRegistry = new Map();
 
-/** Registriert ein eigenes Gerät, damit openPreset() es öffnen kann. */
 export function registerCustomDevice(def) { _customRegistry.set(def.id, def); }
 
-/* ── Panel-ID-Zähler (kein Main-Prozess mehr nötig) ────────────────────── */
 let _panelCounter = 0;
 
-/* ── User-Agent (realer Browser, kein Electron) ───────────────────────── */
-const PANEL_UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36';
-
-/* ── DOM-Refs ─────────────────────────────────────────────────────────────── */
 const workspace = document.getElementById('workspace');
-const welcome   = document.getElementById('welcome');
-const toolbar   = document.getElementById('toolbar');
+const welcome        = document.getElementById('welcome');
+const toolbar        = document.getElementById('toolbar');
+const desktopMonitor = document.getElementById('desktop-monitor');
 const viewCount = document.getElementById('view-count');
 
-/* ── Snap-Guide DOM-Refs ──────────────────────────────────────────────────── */
 const sgL  = document.getElementById('sg-l');
 const sgCv = document.getElementById('sg-cv');
 const sgR  = document.getElementById('sg-r');
@@ -29,16 +23,25 @@ const sgT  = document.getElementById('sg-t');
 const sgCh = document.getElementById('sg-ch');
 const sgB  = document.getElementById('sg-b');
 
-/* Panel-Stapelreihenfolge: Index 0 = hinterster, letzter = vorderster */
 let _stackOrder = [];
 
-/* Webviews die gerade vollständig geladen sind (did-finish-load gefeuert, kein did-start-loading danach) */
-const _wvReady = new WeakSet();
+let _navSaveTimer = null;
+function scheduleNavSave() {
+  clearTimeout(_navSaveTimer);
+  _navSaveTimer = setTimeout(() => saveLayout(state.panels), 800);
+}
+
+const _wvReady  = new WeakSet();
 export function isWvReady(wv) { return _wvReady.has(wv); }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Snap-Guides
-   ══════════════════════════════════════════════════════════════════════════ */
+const _domReady = new WeakSet();
+function safeLoadURL(wv, url) {
+  if (_domReady.has(wv) && typeof wv.loadURL === 'function') {
+    wv.loadURL(url).catch(() => wv.setAttribute('src', url));
+  } else {
+    wv.setAttribute('src', url);
+  }
+}
 
 export function positionSnapGuides() {
   const { wsRect } = state;
@@ -60,7 +63,6 @@ function computeSnap(movId, x, y, w, h, scale) {
   let sx = x, sy = y;
   const gX = new Set(), gY = new Set();
 
-  // Nur Workspace-Kanten und -Mitte einrasten, kein Panel-zu-Panel-Snap
   const xC = [
     { v: 0,              e: 'left'   },
     { v: WW / 2 - vw / 2, e: 'center' },
@@ -93,10 +95,6 @@ function clearSnapGuides() {
   [sgL, sgCv, sgR, sgT, sgCh, sgB].forEach(e => e.classList.remove('show'));
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Panel-Verwaltung
-   ══════════════════════════════════════════════════════════════════════════ */
-
 export async function addPanel(def, opts = {}) {
   const rect  = opts.rect  ?? calcInitialRect(def);
   const scale = opts.scale ?? state.panelScale;
@@ -107,25 +105,50 @@ export async function addPanel(def, opts = {}) {
   workspace.appendChild(decoEl);
   applyDecoRect({ rect, decoEl, scale });
   bringToFront(id);
-  // src-Attribut setzen → Electron navigiert nach DOM-Insertion ohne Race-Condition
-  if (url) {
-    const wv = decoEl.querySelector('.panel-webview');
-    if (wv) wv.setAttribute('src', url);
+  const wv = decoEl.querySelector('.panel-webview');
+  if (wv) {
+    const { mobile, ua } = getDeviceEmulationOpts(def);
+    // Listener vor src setzen – kein Race-Condition-Risiko.
+    // dom-ready fired für die geladene Seite, nicht für about:blank.
+    wv.addEventListener('dom-ready', () => {
+      window.ss.setViewport(wv.getWebContentsId(), def.w, def.h, { mobile, ua });
+    }, { once: true });
+    if (mobile) {
+      wv.addEventListener('did-finish-load', () => {
+        wv.executeJavaScript(`(function(){
+  if(window.__eTouchPf)return; window.__eTouchPf=1;
+  function mk(e){try{return new Touch({identifier:1,target:e.target,
+    clientX:e.clientX,clientY:e.clientY,screenX:e.screenX,screenY:e.screenY,
+    radiusX:1,radiusY:1,rotationAngle:0,force:1});}catch(x){return null;}}
+  document.addEventListener('mousedown',function(e){
+    if(!e.isTrusted||e.button!==0)return;
+    var t=mk(e);if(!t)return;
+    e.target.dispatchEvent(new TouchEvent('touchstart',
+      {bubbles:true,cancelable:true,touches:[t],targetTouches:[t],changedTouches:[t]}));
+  },true);
+  document.addEventListener('mouseup',function(e){
+    if(!e.isTrusted||e.button!==0)return;
+    var t=mk(e);if(!t)return;
+    e.target.dispatchEvent(new TouchEvent('touchend',
+      {bubbles:true,cancelable:true,touches:[],targetTouches:[],changedTouches:[t]}));
+  },true);
+})()`).catch(()=>{});
+      });
+    }
+    if (url) wv.setAttribute('src', url);
   }
   updateChips();
   showWorkspace();
-  saveLayout(state.panels);
+  if (!opts.skipSave) saveLayout(state.panels);
 }
 
 export function removePanel(id) {
   const p = state.panels.get(id);
   if (!p) return;
   maybeExitFocusOnRemove(id);
-  // Hover-Listener aufräumen
   if (p.decoEl._hudMoveHandler) {
     document.removeEventListener('mousemove', p.decoEl._hudMoveHandler);
   }
-  // Webview-Readiness-Tracking aufräumen
   const wv = p.decoEl.querySelector('.panel-webview');
   if (wv) _wvReady.delete(wv);
   p.decoEl.remove();
@@ -171,7 +194,6 @@ export function bringToFront(id) {
   _stackOrder = _stackOrder.filter(i => i !== id);
   _stackOrder.push(id);
   state.topId = id;
-  // CSS z-index: webview + rahmen bewegen sich gemeinsam im gleichen Stack
   _stackOrder.forEach((pid, idx) => {
     const p = state.panels.get(pid);
     if (p) p.decoEl.style.zIndex = 10 + idx;
@@ -185,21 +207,22 @@ export function updateChips() {
   }
   const n = state.panels.size;
   viewCount.textContent = n === 0 ? '0 Ansichten' : `${n} Ansicht${n !== 1 ? 'en' : ''}`;
+  const badge = document.getElementById('views-badge');
+  if (badge) { badge.textContent = n; badge.hidden = n === 0; }
 }
 
 export function showWorkspace() {
   welcome.classList.add('hidden');
   toolbar.classList.remove('hidden');
+  if (desktopMonitor) desktopMonitor.style.display = '';
 }
 
 export function showWelcome() {
   welcome.classList.remove('hidden');
   toolbar.classList.add('hidden');
+  if (desktopMonitor) desktopMonitor.style.display = 'none';
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Maximieren
-   ══════════════════════════════════════════════════════════════════════════ */
 const _prevMaxRect = new Map();
 
 export function toggleMaximize(id) {
@@ -229,15 +252,10 @@ export function toggleMaximize(id) {
   applyDecoRect(p);
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Auto-Arrange
-   ══════════════════════════════════════════════════════════════════════════ */
-
 export function autoArrange() {
   if (state.panels.size === 0) return;
   const PAD = 14;
-  // Höchste Panels zuerst → Zeilenumbruch funktioniert optisch besser
-  const entries = [...state.panels.entries()].sort(([, a], [, b]) => b.rect.h - a.rect.h);
+  const entries = [...state.panels.entries()].sort(([, a], [, b]) => b.rect.h - a.rect.h); // höchste zuerst
   let x = PAD, y = PAD, rowH = 0;
   for (const [id, p] of entries) {
     if (x > PAD && x + p.rect.w > state.wsRect.w - PAD) {
@@ -251,9 +269,6 @@ export function autoArrange() {
   toast('Panels angeordnet', 'info');
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Fokus-Modus
-   ══════════════════════════════════════════════════════════════════════════ */
 let focusedId = null;
 
 export function toggleFocus(id) {
@@ -279,15 +294,12 @@ export function maybeExitFocusOnRemove(id) {
   workspace.classList.remove('focus-mode');
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Drag
-   ══════════════════════════════════════════════════════════════════════════ */
 let drag = null;
 
 function startDrag(e, id) {
   e.preventDefault();
   bringToFront(id);
-  // ALLE webviews (auch Desktop-WV!) deaktivieren, damit sie keine Mouse-Events stehlen
+  // Alle webviews deaktivieren, damit sie keine Mouse-Events abfangen
   document.querySelectorAll('webview').forEach(wv => { wv.style.pointerEvents = 'none'; });
   const p = state.panels.get(id);
   p.decoEl.classList.add('dragging');
@@ -314,7 +326,6 @@ function onDragMove(e) {
     let nx = drag.ox + (drag._ex - drag.mx);
     let ny = drag.oy + (drag._ey - drag.my);
     ({ x: nx, y: ny } = clampRect({ x: nx, y: ny, w: drag.w, h: drag.h }, drag.scale));
-    // Live-Snap: Panel magnetisiert zu Kanten/Mitte, Guides werden sofort angezeigt
     if (state.snapEnabled) {
       const sn = computeSnap(drag.id, nx, ny, drag.w, drag.h, drag.scale);
       nx = sn.x; ny = sn.y;
@@ -351,7 +362,6 @@ function onDragEnd() {
       setTimeout(clearSnapGuides, 600);
     }
   }
-  // Endposition schreiben, transform zurücksetzen; webviews wieder aktiv
   for (const p of state.panels.values()) applyDecoRect(p);
   document.querySelectorAll('webview').forEach(wv => { wv.style.pointerEvents = ''; });
   saveLayout(state.panels);
@@ -361,9 +371,6 @@ function onDragKey(e) {
   if (e.key === 'Escape') onDragEnd();
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Resize
-   ══════════════════════════════════════════════════════════════════════════ */
 let rsz = null;
 
 function startResize(e, id) {
@@ -419,69 +426,24 @@ function onResizeKey(e) {
 
 const _pendingBounds = new Map();
 
-/**
- * Navigiert ein Webview-Element zur Ziel-URL.
- *
- * Wenn das Webview bereits auf derselben Origin geladen ist, wird
- * client-seitiges Routing per history.pushState + popstate verwendet –
- * dadurch entfällt der Server-Roundtrip und die SPA navigiert direkt
- * ohne den "/"-Flash durch Redirect-Ketten.
- *
- * Nur bei unterschiedlicher Origin oder noch nicht geladenem Webview
- * wird loadURL (vollständiger Seitenaufruf) verwendet.
- */
 function navigateWv(wv, url) {
-  if (!wv) return;
-
-  let currentOrigin = null;
-  let targetOrigin  = null;
-  try {
-    const cur = typeof wv.getURL === 'function' ? wv.getURL() : '';
-    if (cur && cur !== 'about:blank') currentOrigin = new URL(cur).origin;
-    targetOrigin = new URL(url).origin;
-  } catch { /* ungültige URL → loadURL verwenden */ }
-
-  if (currentOrigin && currentOrigin === targetOrigin) {
-    // Gleiche Origin → SPA-Router direkt ansprechen, kein Server-Redirect, kein Flash
-    const { pathname, search, hash } = new URL(url);
-    const path = pathname + search + hash;
-    // Aktuellen Pfad prüfen – nicht navigieren wenn bereits dort
-    try {
-      if (currentOrigin && new URL(typeof wv.getURL === 'function' ? wv.getURL() : '').pathname + new URL(typeof wv.getURL === 'function' ? wv.getURL() : '').search === pathname + search) return;
-    } catch { /* ignorieren */ }
-    if (!_wvReady.has(wv)) {
-      // Webview lädt noch → loadURL statt executeJavaScript (kein GUEST_VIEW_MANAGER Fehler)
-      if (typeof wv.loadURL === 'function') {
-        wv.loadURL(url).catch(() => wv.setAttribute('src', url));
-      } else {
-        wv.setAttribute('src', url);
-      }
-      return;
-    }
+  const decision = navigateWvLogic(wv, url, wv ? _wvReady.has(wv) : false);
+  if (decision.action === 'reload') {
+    wv.reload();
+  } else if (decision.action === 'pushState') {
+    const { pathname, search, hash } = new URL(decision.url);
     wv.executeJavaScript(
       `(function(){` +
-      `  history.pushState(null,'',${JSON.stringify(path)});` +
-      `  window.dispatchEvent(new PopStateEvent('popstate',{state:null}));` +
-      `})()`,
-    ).catch(() => {
-      // Falls executeJavaScript schlägt fehl (z.B. webview noch nicht bereit): loadURL
-      if (typeof wv.loadURL === 'function') {
-        wv.loadURL(url).catch(() => wv.setAttribute('src', url));
-      } else {
-        wv.setAttribute('src', url);
-      }
-    });
-  } else {
-    // Andere Origin oder noch nicht geladen → vollständiger Seitenaufruf
-    if (typeof wv.loadURL === 'function') {
-      wv.loadURL(url).catch(() => wv.setAttribute('src', url));
-    } else {
-      wv.setAttribute('src', url);
-    }
+      `history.pushState(null,'',${JSON.stringify(pathname + search + hash)});` +
+      `window.dispatchEvent(new PopStateEvent('popstate',{state:null}));` +
+      `})()`
+    ).catch(() => safeLoadURL(wv, decision.url));
+  } else if (decision.action === 'loadURL') {
+    safeLoadURL(wv, decision.url);
   }
+  // 'noop': wv war null → nichts tun
 }
 
-/* Navigiere ein Panel per webview (für app.js aufrufbar). */
 export function navigatePanel(id, url) {
   const p = state.panels.get(id);
   if (!p) return;
@@ -494,18 +456,31 @@ export function navigateAllPanels(url) {
   }
 }
 
-/* Screenshot eines Panels über das webview-Element. */
 export async function screenshotPanel(id) {
   const p = state.panels.get(id);
   if (!p) return null;
-  const wv = p.decoEl.querySelector('.panel-webview');
-  if (!wv) return null;
-  try {
-    const img  = await wv.capturePage();
-    const size = img.getSize();
-    return { id, label: p.def.label, w: p.def.w, h: p.def.h,
-             png: img.toDataURL().split(',')[1], visW: size.width, visH: size.height };
-  } catch { return null; }
+  // WYSIWYG: Den sichtbaren panel-deco-Bereich (CSS-Geräterahmen + Webview-Inhalt)
+  // direkt als Bildschirmausschnitt aufnehmen. So ist das Ergebnis pixelgenau
+  // identisch mit dem, was der Benutzer im Workspace sieht.
+  const br = p.decoEl.getBoundingClientRect();
+  const png = await window.ss.captureRect({
+    x:      Math.round(br.left),
+    y:      Math.round(br.top),
+    width:  Math.round(br.width),
+    height: Math.round(br.height),
+  });
+  if (!png) return null;
+  const s = p.scale ?? state.panelScale;
+  return {
+    id,
+    label:  p.def.label,
+    w:      Math.round(br.width),
+    h:      Math.round(br.height),
+    wsX:    p.rect.x,
+    wsY:    p.rect.y,
+    scale:  s,
+    png,
+  };
 }
 
 export async function screenshotAllPanels() {
@@ -517,12 +492,7 @@ export async function screenshotAllPanels() {
   return results;
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Dekoration
-   ══════════════════════════════════════════════════════════════════════════ */
-
-/** Für eigene Panels: Frame-Stil anhand der Dimensionen ermitteln. */
-function detectFrameDevice(def) {
+export function detectFrameDevice(def) {
   if (!def.id.startsWith('custom-')) return def.id;
   const { w, h } = def;
   const portrait = h >= w;
@@ -532,13 +502,19 @@ function detectFrameDevice(def) {
   return 'desktop';
 }
 
+function getDeviceEmulationOpts(def) {
+  const deviceType = detectFrameDevice(def);
+  const mobile = def.mobile ?? (deviceType === 'android' || deviceType === 'iphone' || deviceType === 'tablet');
+  const ua     = DEVICE_UA[deviceType] ?? DEVICE_UA.desktop;
+  return { mobile, ua };
+}
+
 function createDecoEl(id, def, scale = state.panelScale) {
   const el = document.createElement('div');
   el.className      = 'panel-deco';
   el.dataset.id     = id;
-  // Preset: def.id ("iphone", "laptop" …); Custom: erkannter Frame-Stil
   el.dataset.device = detectFrameDevice(def);
-  // Für eigene Panels mit erkanntem Frame: Rahmenmaße aus dem Stil-Preset ableiten
+  const { ua: deviceUA } = getDeviceEmulationOpts(def); // UA wird vor erster Navigation benötigt
   let { frame } = def;
   if (def.id.startsWith('custom-') && !frame) {
     const framePresets = {
@@ -548,7 +524,6 @@ function createDecoEl(id, def, scale = state.panelScale) {
     };
     frame = framePresets[el.dataset.device];
   }
-  // Frame-CSS-Variablen für alle Seiten
   const fl = frame?.l ?? 0, fr = frame?.r ?? 0;
   const ft = frame?.t ?? 0, fb = frame?.b ?? 0;
   el.style.setProperty('--ft', ft + 'px');
@@ -582,8 +557,7 @@ function createDecoEl(id, def, scale = state.panelScale) {
       <div class="panel-loading hidden"><div class="spinner"></div></div>
       <webview class="panel-webview"
         partition="persist:desktop"
-        allowpopups
-      ></webview>
+        allowpopups        useragent="${deviceUA}"      ></webview>
     </div>
     <div class="panel-device-bot">
       <span class="device-home"></span>
@@ -594,26 +568,26 @@ function createDecoEl(id, def, scale = state.panelScale) {
       </svg>
     </div>`;
 
-  // Navigation-Events: dom-Events für app.js weiterleiten
   const wv = el.querySelector('.panel-webview');
   wv.addEventListener('did-navigate', e => {
     window.dispatchEvent(new CustomEvent('ss:navigated', { detail: { id, url: e.url } }));
+    if (e.url && e.url !== 'about:blank') scheduleNavSave();
   });
   wv.addEventListener('did-navigate-in-page', e => {
-    if (e.isMainFrame)
+    if (e.isMainFrame) {
       window.dispatchEvent(new CustomEvent('ss:navigated', { detail: { id, url: e.url } }));
+      if (e.url && e.url !== 'about:blank') scheduleNavSave();
+    }
   });
   wv.addEventListener('new-window', e => {
     window.dispatchEvent(new CustomEvent('ss:popup', { detail: { url: e.url } }));
   });
 
-  // ── Lade-Spinner ─────────────────────────────────────────────────────────
   const loadingEl = el.querySelector('.panel-loading');
   let _spinnerTimer = null;
   const showSpinner = () => {
     clearTimeout(_spinnerTimer);
     loadingEl.classList.remove('hidden');
-    // Fallback: Spinner nie länger als 20 s anzeigen
     _spinnerTimer = setTimeout(() => loadingEl.classList.add('hidden'), 20_000);
   };
   const hideSpinner = () => {
@@ -621,6 +595,7 @@ function createDecoEl(id, def, scale = state.panelScale) {
     loadingEl.classList.add('hidden');
   };
 
+  wv.addEventListener('dom-ready',         () => { _domReady.add(wv); });
   wv.addEventListener('did-start-loading', () => { _wvReady.delete(wv); showSpinner(); });
   wv.addEventListener('did-stop-loading',  () => { _wvReady.add(wv);    hideSpinner(); });
   wv.addEventListener('did-finish-load',   () => {
@@ -628,10 +603,11 @@ function createDecoEl(id, def, scale = state.panelScale) {
   });
   wv.addEventListener('did-fail-load', e => { if (e.isMainFrame) hideSpinner(); });
 
-  // ── Doppelklick auf Titelleiste → Bezeichnung umbenennen ─────────────────
+  // .panel-titlelabel hat pointer-events:none (Drag durch Text hindurch).
+  // dblclick-Listener daher am übergeordneten .panel-titlebar.
   const hudLabel    = el.querySelector('.hud-label');
   const titleLabel  = el.querySelector('.panel-titlelabel');
-  titleLabel.addEventListener('dblclick', e => {
+  el.querySelector('.panel-titlebar').addEventListener('dblclick', e => {
     e.preventDefault(); e.stopPropagation();
     const p = state.panels.get(id);
     if (titleLabel._renaming) return;
@@ -668,7 +644,6 @@ function createDecoEl(id, def, scale = state.panelScale) {
   el.querySelector('.panel-resize').addEventListener('mousedown', e => startResize(e, id));
   el.addEventListener('mousedown', () => bringToFront(id));
 
-  // ── Hover-HUD: Buttons verdrahten ─────────────────────────────────────
   el.querySelector('.panel-hud').addEventListener('click', e => {
     const btn = e.target.closest('[data-hud]');
     if (!btn) return;
@@ -700,7 +675,6 @@ function createDecoEl(id, def, scale = state.panelScale) {
     }
   });
 
-  // ── Hover-Tracking für HUD-Sichtbarkeit ───────────────────────────────
   const _hudMove = e => {
     const r = el.getBoundingClientRect();
     el.classList.toggle('hud-visible',

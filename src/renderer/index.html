@@ -47,65 +47,61 @@
       <button type="button" id="zoom-in" class="zoom-step" aria-label="Vergrößern">+</button>
     </div>
 
+    <button id="darkmode-btn" class="icon-btn" style="margin-left:8px" title="Dark Mode ein-/ausschalten" aria-label="Dark Mode">
+      <svg id="darkmode-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+      <svg id="darkmode-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+    </button>
+
+    <button id="about-btn" class="icon-btn" style="margin-left:4px" title="Über Blickfang · Kontakt" aria-label="Über die App">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="8.5"/>
+        <line x1="12" y1="12" x2="12" y2="16"/>
+      </svg>
+    </button>
+
   </header>
 
   <!-- ══════════════════════════ DEVICE-BAR ══════════════════════════════ -->
   <div id="device-bar">
-    <span class="bar-label">Ansichten:</span>
-    <div id="chips" role="group" aria-label="Geräteansichten auswählen">
-
-      <button class="chip" data-preset="laptop"
-        data-w="1366" data-h="768" data-label="Laptop"
-        title="Laptop · 1366 × 768 px">
-        <svg width="15" height="14" viewBox="0 0 22 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-          <rect x="2" y="1" width="18" height="12" rx="1.5"/>
-          <path d="M0 17h22"/>
+    <div id="views-picker">
+      <button id="views-btn" class="views-btn" aria-haspopup="true" aria-expanded="false"
+        title="Geräteansichten hinzufügen oder entfernen">
+        <svg width="14" height="13" viewBox="0 0 20 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <rect x="1" y="1" width="7" height="7" rx="1.5"/><rect x="12" y="1" width="7" height="7" rx="1.5"/>
+          <rect x="1" y="10" width="7" height="7" rx="1.5"/><rect x="12" y="10" width="7" height="7" rx="1.5"/>
         </svg>
-        Laptop
-        <span class="chip-size">1366×768</span>
+        Ansichten
+        <span id="views-badge" class="views-badge" hidden>0</span>
+        <svg class="views-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <polyline points="2 4 6 8 10 4"/>
+        </svg>
       </button>
 
-      <button class="chip" data-preset="tablet"
-        data-w="768" data-h="1024" data-label="Tablet"
-        title="Tablet · 768 × 1024 px">
-        <svg width="11" height="14" viewBox="0 0 16 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-          <rect x="1" y="1" width="14" height="20" rx="2"/>
-          <circle cx="8" cy="18" r=".8" fill="currentColor" stroke="none"/>
-        </svg>
-        Tablet
-        <span class="chip-size">768×1024</span>
-      </button>
+    </div>
 
-      <button class="chip" data-preset="iphone"
-        data-w="390" data-h="844" data-label="iPhone"
-        title="iPhone · 390 × 844 px">
-        <svg width="9" height="14" viewBox="0 0 12 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-          <rect x="1" y="1" width="10" height="20" rx="2.5"/>
-          <line x1="4.5" y1="3.2" x2="7.5" y2="3.2"/>
-          <circle cx="6" cy="18.5" r=".7" fill="currentColor" stroke="none"/>
-        </svg>
-        iPhone
-        <span class="chip-size">390×844</span>
-      </button>
-
-      <button class="chip" data-preset="android"
-        data-w="360" data-h="800" data-label="Android"
-        title="Android · 360 × 800 px">
-        <svg width="9" height="14" viewBox="0 0 12 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-          <rect x="1" y="1" width="10" height="20" rx="2.5"/>
-          <line x1="4" y1="3.2" x2="8" y2="3.2"/>
-        </svg>
-        Android
-        <span class="chip-size">360×800</span>
-      </button>
-
-      <button class="chip chip-add" id="custom-btn" title="Eigene Bildschirmgröße">
-        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-          <line x1="10" y1="3" x2="10" y2="17"/><line x1="3" y1="10" x2="17" y2="10"/>
-        </svg>
-        Eigene Größe
-      </button>
-
+    <!-- Templates -->
+    <div id="template-wrap" title="Layout-Templates: vordefinierte Geräte-Kombinationen laden oder eigene speichern">
+      <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="1" y="1" width="8" height="8" rx="1.5"/>
+        <rect x="11" y="1" width="8" height="8" rx="1.5"/>
+        <rect x="1" y="11" width="8" height="8" rx="1.5"/>
+        <rect x="11" y="11" width="8" height="8" rx="1.5"/>
+      </svg>
+      <select id="template-select" aria-label="Template wählen">
+        <option value="">— Template wählen —</option>
+      </select>
+      <button id="template-load-btn" class="tpl-btn" title="Template laden" disabled>Laden</button>
+      <button id="template-save-btn" class="tpl-btn" title="Aktuelles Layout als Template speichern">Speichern</button>
+      <button id="template-del-btn"  class="tpl-btn tpl-btn-del" title="Gewähltes Template löschen" disabled>✕</button>
     </div>
 
     <!-- Ansichtsgröße-Slider (rechts ausgerichtet via margin-left:auto) -->
@@ -127,6 +123,60 @@
       <span class="snap-text">Einrasten</span>
     </label>
 
+  </div>
+
+  <!-- Geräte-Dropdown als body-Portal (position:fixed via JS, außerhalb device-bar) -->
+  <div id="views-dropdown" class="views-dropdown" role="group" aria-label="Geräteansichten auswählen" hidden>
+    <div id="chips">
+
+      <button class="chip" data-preset="laptop"
+        data-w="1366" data-h="768" data-label="Laptop"
+        title="Laptop · 1366 × 768 px">
+        <svg width="15" height="14" viewBox="0 0 22 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <rect x="2" y="1" width="18" height="12" rx="1.5"/><path d="M0 17h22"/>
+        </svg>
+        Laptop
+        <span class="chip-size">1366×768</span>
+      </button>
+
+      <button class="chip" data-preset="tablet"
+        data-w="768" data-h="1024" data-label="Tablet"
+        title="Tablet · 768 × 1024 px">
+        <svg width="11" height="14" viewBox="0 0 16 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <rect x="1" y="1" width="14" height="20" rx="2"/><circle cx="8" cy="18" r=".8" fill="currentColor" stroke="none"/>
+        </svg>
+        Tablet
+        <span class="chip-size">768×1024</span>
+      </button>
+
+      <button class="chip" data-preset="iphone"
+        data-w="390" data-h="844" data-label="iPhone"
+        title="iPhone · 390 × 844 px">
+        <svg width="9" height="14" viewBox="0 0 12 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <rect x="1" y="1" width="10" height="20" rx="2.5"/><line x1="4.5" y1="3.2" x2="7.5" y2="3.2"/><circle cx="6" cy="18.5" r=".7" fill="currentColor" stroke="none"/>
+        </svg>
+        iPhone
+        <span class="chip-size">390×844</span>
+      </button>
+
+      <button class="chip" data-preset="android"
+        data-w="360" data-h="800" data-label="Android"
+        title="Android · 360 × 800 px">
+        <svg width="9" height="14" viewBox="0 0 12 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <rect x="1" y="1" width="10" height="20" rx="2.5"/><line x1="4" y1="3.2" x2="8" y2="3.2"/>
+        </svg>
+        Android
+        <span class="chip-size">360×800</span>
+      </button>
+
+      <button class="chip chip-add" id="custom-btn" title="Eigene Bildschirmgröße">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <line x1="10" y1="3" x2="10" y2="17"/><line x1="3" y1="10" x2="17" y2="10"/>
+        </svg>
+        Eigene Größe
+      </button>
+
+    </div>
   </div>
 
   <!-- ══════════════════════════ WELCOME ══════════════════════════════════ -->
@@ -198,6 +248,12 @@
       src="about:blank" allowpopups></webview>
   </main>
 
+  <!-- Monitor-Rahmen über der Desktop-View (via JS ein-/ausgeblendet) -->
+  <div id="desktop-monitor" aria-hidden="true"></div>
+
+  <!-- Unsichtbarer Trigger-Strip ganz oben – liegt über Webviews, mouseenter zuverlässig -->
+  <div id="hint-trigger" aria-hidden="true"></div>
+
   <!-- Präsentationsmodus Exit-Hinweis -->
   <div id="presentation-hint" aria-hidden="true">Esc&nbsp;/&nbsp;F11 · Präsentationsmodus beenden</div>
 
@@ -227,23 +283,20 @@
         </button>
 
         <select id="ss-mode" title="Screenshot-Modus">
-          <option value="combined">Nebeneinander</option>
           <option value="workspace">Workspace-Layout</option>
+          <option value="combined">Nebeneinander</option>
           <option value="single">Einzeln</option>
         </select>
 
         <button id="annotate-btn" class="btn btn-ghost"
-          title="Screenshot annotieren – Pfeile, Kreise, Lupe">
+          title="Screenshot-Editor – Pfeile, Kreise, Lupe in den Screenshot einzeichnen">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 20h9"/>
             <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
           </svg>
-          Annotieren
+          Screenshot-Editor
         </button>
-        <label class="cb-label" title="Mauszeiger beim Öffnen in den Screenshot einzeichnen">
-          <input type="checkbox" id="annotate-cursor-cb"> Mauszeiger
-        </label>
       </div>
 
       <div class="tb-group tb-right">
@@ -346,38 +399,63 @@
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>
         </button>
       </div>
-      <div id="keys-help-section" class="hidden" style="margin:0 20px 0;padding:12px 14px;background:#f8f9fd;border-radius:8px;border:1px solid #e0e3f0;font-size:12.5px;line-height:1.6;">
-        <p style="margin:0 0 6px"><strong>Warum braucht Blickfang diese Schlüssel?</strong><br>
-        Electron liefert keine Google-API-Schlüssel mit. Ohne sie verweigert Chromium
-        die Push-Registrierung: <code style="background:#eef0ff;padding:1px 4px;border-radius:3px;">Registration failed – push service not available</code></p>
-        <p style="margin:4px 0 2px"><strong>GOOGLE_API_KEY</strong> – Firebase Console → Projekteinstellungen → Allgemein → Web-App → <code>apiKey</code></p>
-        <p style="margin:4px 0 2px"><strong>CLIENT_ID</strong> – Google Cloud Console → APIs &amp; Dienste → Anmeldedaten → OAuth 2.0-Client-ID (Typ: Desktop) → Client-ID</p>
-        <p style="margin:4px 0 0"><strong>CLIENT_SECRET</strong> – dieselbe OAuth-App → Client-Secret</p>
+      <div id="keys-help-section" class="hidden" style="margin:0 20px 0;padding:14px 16px;background:#f8f9fd;border-radius:8px;border:1px solid #e0e3f0;font-size:12.5px;line-height:1.7;max-height:55vh;overflow-y:auto;">
+
+        <p style="margin:0 0 10px"><strong>Wofür sind diese Schlüssel?</strong><br>
+        Wenn eine Webseite dir Benachrichtigungen schicken möchte (z.&nbsp;B. „Neue Nachricht!"), braucht sie dafür einen speziellen Dienst von Google. Blickfang muss Google gegenüber beweisen, wer es ist – das passiert über diese drei Schlüssel. Ohne sie erscheint in manchen Webseiten eine Fehlermeldung.</p>
+
+        <p style="margin:0 0 4px"><strong>Wichtig vorab:</strong> Du benötigst ein Google-Konto (dasselbe wie für Gmail, YouTube usw.). Falls du noch keins hast, kannst du unter <a href="https://accounts.google.com/signup" style="color:#4f5fb0">accounts.google.com/signup</a> kostenlos eines erstellen.</p>
+
+        <hr style="border:none;border-top:1px solid #dde0f0;margin:12px 0">
+
+        <p style="margin:0 0 6px"><strong>Schritt 1 – GOOGLE_API_KEY holen</strong></p>
+        <ol style="margin:0 0 10px;padding-left:18px">
+          <li>Öffne in deinem Browser die Seite <strong>firebase.google.com</strong> und klicke oben rechts auf <em>„Konsole"</em> (oder <em>„Go to console"</em>).</li>
+          <li>Melde dich mit deinem Google-Konto an.</li>
+          <li>Klicke auf <em>„Projekt hinzufügen"</em>, vergib einen beliebigen Namen (z.&nbsp;B. „Blickfang") und bestätige die nächsten Schritte mit <em>„Weiter"</em> und <em>„Projekt erstellen"</em>. (Wenn du dort schon ein Projekt hast, wähle es einfach aus.)</li>
+          <li>Im Projekt angekommen: Klicke links oben auf das <strong>Zahnrad-Symbol</strong> neben „Projektübersicht" → <em>„Projekteinstellungen"</em>.</li>
+          <li>Klicke auf den Reiter <em>„Allgemein"</em>. Scrolle ganz nach unten zum Abschnitt <em>„Deine Apps"</em>.</li>
+          <li>Falls dort noch keine App steht: Klicke auf das <strong>&lt;/&gt;</strong>-Symbol (Web), vergib einen Namen und bestätige mit <em>„App registrieren"</em>.</li>
+          <li>Es erscheint ein Codeblock. Darin findest du eine Zeile wie <code style="background:#eef0ff;padding:1px 4px;border-radius:3px;">apiKey: "AIzaSy…"</code>. Kopiere den langen Text zwischen den Anführungszeichen – das ist dein <strong>GOOGLE_API_KEY</strong>.</li>
+        </ol>
+
+        <p style="margin:0;color:#6b7294"><strong>Nach dem Speichern</strong> muss Blickfang einmal neu gestartet werden, damit der Key wirksam wird.</p>
       </div>
       <div class="dlg-body" style="line-height:1.6;font-size:13px;">
-        <p>Blickfang leitet diese Zugangsdaten beim Start an Chromium weiter, damit
+        <p>Blickfang leitet diese Werte beim Start an Chromium weiter, damit
         die geladenen Webseiten Push-Notifications empfangen können.<br>
+        Alle vier Werte findest du in der Firebase-Konsole unter
+        <em>Projekteinstellungen → Deine Apps → Web-App → firebaseConfig</em>.<br>
         Ohne Konfiguration schlägt die Registrierung fehl:
         <code style="background:#f0f1f8;padding:2px 5px;border-radius:4px;">Registration failed &ndash; push service not available</code></p>
 
         <div class="dlg-row" style="margin-top:12px;">
-          <label for="k-api" style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">GOOGLE_API_KEY</label>
+          <label for="k-api" style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">GOOGLE_API_KEY (apiKey)</label>
           <input type="text" id="k-api" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d0d3e8;border-radius:6px;font-size:13px;" placeholder="AIzaSy..." autocomplete="off" spellcheck="false">
         </div>
         <div class="dlg-row" style="margin-top:10px;">
-          <label for="k-cid" style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">GOOGLE_DEFAULT_CLIENT_ID</label>
-          <input type="text" id="k-cid" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d0d3e8;border-radius:6px;font-size:13px;" placeholder="123456789-....apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+          <label for="k-app-id" style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">APP_ID (appId)</label>
+          <input type="text" id="k-app-id" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d0d3e8;border-radius:6px;font-size:13px;" placeholder="1:206084148915:web:..." autocomplete="off" spellcheck="false">
         </div>
         <div class="dlg-row" style="margin-top:10px;">
-          <label for="k-sec" style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">GOOGLE_DEFAULT_CLIENT_SECRET</label>
-          <input type="text" id="k-sec" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d0d3e8;border-radius:6px;font-size:13px;" placeholder="GOCSPX-..." autocomplete="off" spellcheck="false">
+          <label for="k-project" style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">PROJECT_ID (projectId)</label>
+          <input type="text" id="k-project" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d0d3e8;border-radius:6px;font-size:13px;" placeholder="mein-projekt-12345" autocomplete="off" spellcheck="false">
         </div>
-        <p style="margin-top:12px;color:#6b7294;font-size:12px;">Nach dem Speichern die App <strong>neu starten</strong>,
-        damit die Zugangsdaten wirksam werden.</p>
+        <div class="dlg-row" style="margin-top:10px;">
+          <label for="k-sender" style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">MESSAGING_SENDER_ID (messagingSenderId)</label>
+          <input type="text" id="k-sender" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d0d3e8;border-radius:6px;font-size:13px;" placeholder="206084148915" autocomplete="off" spellcheck="false">
+        </div>
+        <div id="keys-diag-wrap" class="hidden" style="margin-top:10px;position:relative;">
+          <pre id="keys-diag-out" style="margin:0;padding:10px 12px;background:#f0f1f8;border-radius:6px;font-size:11.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all;color:#3a3d5c;border:1px solid #d8daf0;user-select:text;-webkit-user-select:text;"></pre>
+          <button id="keys-diag-copy" title="In Zwischenablage kopieren" style="position:absolute;top:6px;right:6px;padding:3px 8px;font-size:11px;border:1px solid #b0b4d0;border-radius:4px;background:#fff;cursor:pointer;color:#4f5fb0;">Kopieren</button>
+        </div>
       </div>
-      <div class="dlg-foot">
+      <div class="dlg-foot" style="flex-wrap:wrap;gap:6px;">
+        <button class="btn btn-ghost" id="keys-diag-btn" title="Zeigt welche Keys beim Start tatsächlich geladen wurden">Diagnose</button>
+        <button class="btn btn-ghost" id="keys-clear-push-btn" title="Löscht gecachten Push-Status (Service Worker zurücksetzen)">Push zurücksetzen</button>
+        <span style="flex:1"></span>
         <button class="btn btn-ghost" id="keys-dlg-cancel">Abbrechen</button>
-        <button class="btn btn-primary" id="keys-dlg-save">Speichern</button>
+        <button class="btn btn-primary" id="keys-dlg-save">Speichern &amp; Neustart</button>
       </div>
     </div>
   </div>
@@ -410,7 +488,10 @@
           <span aria-hidden="true">◯</span> Kreis
         </button>
         <button class="at-tool" data-tool="magnifier" title="Zoom-Lupe (M)">
-          <span aria-hidden="true">⊕</span> Lupe
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="8" cy="8" r="6"/><line x1="13" y1="13" x2="18" y2="18"/>
+          </svg>
+          Lupe
         </button>
         <button class="at-tool" data-tool="crop" title="Ausschnitt wählen und beim Speichern zuschneiden (K)">
           <span aria-hidden="true">✂</span> Ausschnitt
@@ -460,9 +541,8 @@
 
       <div class="at-spacer"></div>
 
-      <!-- Aktionen rechts + Hinweis -->
+      <!-- Aktionen rechts -->
       <div class="at-section">
-        <span id="annotate-hint" class="at-hint">Pfeil: Startpunkt klicken · zur Spitze ziehen</span>
         <button id="annotate-save"      class="at-action at-save">↓ Speichern</button>
         <button id="annotate-close-btn" class="at-action">✕ Schließen</button>
       </div>
@@ -478,7 +558,56 @@
       </div>
     </div>
 
+    <!-- Statusleiste -->
+    <div id="annotate-status">
+      <span id="annotate-hint">Pfeil: Startpunkt klicken · zur Spitze ziehen</span>
+    </div>
+
   </div>
+
+  <!-- ══════════════════════════ ABOUT-DIALOG ═══════════════════════════ -->
+  <dialog id="about-dialog" aria-modal="true" aria-labelledby="about-title">
+    <div class="about-inner">
+      <button id="about-close" class="about-close" aria-label="Schließen">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+          <line x1="2" y1="2" x2="12" y2="12"/><line x1="12" y1="2" x2="2" y2="12"/>
+        </svg>
+      </button>
+
+      <div class="about-logo" aria-hidden="true">
+        <img src="../assets/icon.png" width="52" height="52" alt="" style="border-radius:12px;">
+      </div>
+
+      <h2 id="about-title">Blickfang · Viewport</h2>
+      <p class="about-desc">Kostenlose Open-Source-App zum gleichzeitigen Betrachten von Websites auf verschiedenen Gerätegrößen.</p>
+
+      <div class="about-links">
+        <a class="about-link" data-href="https://github.com/mastercad" data-label="GitHub">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2C6.477 2 2 6.484 2 12.021c0 4.428 2.865 8.185 6.839 9.511.5.092.682-.217.682-.482 0-.237-.009-.868-.014-1.703-2.782.605-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.026 2.747-1.026.546 1.378.202 2.397.1 2.65.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.944.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.744 0 .267.18.579.688.481C19.138 20.203 22 16.447 22 12.021 22 6.484 17.523 2 12 2z"/>
+          </svg>
+          github.com/mastercad
+        </a>
+        <a class="about-link" data-href="https://www.byte-artist.de" data-label="Website">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"/>
+          </svg>
+          byte-artist.de
+        </a>
+        <a class="about-link" data-href="mailto:andreas.kempe@byte-artist.de" data-label="E-Mail">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <polyline points="2 5 12 13 22 5"/>
+          </svg>
+          andreas.kempe@byte-artist.de
+        </a>
+      </div>
+
+      <p class="about-copy">© 2026 Andreas Kempe · MIT-Lizenz</p>
+    </div>
+  </dialog>
 
   <script type="module" src="app.js"></script>
 </body>

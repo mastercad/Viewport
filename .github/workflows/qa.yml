@@ -1,0 +1,48 @@
+name: QA
+
+# Wiederverwendbarer Workflow – wird von CI und Release aufgerufen.
+# Enthält Lint und Tests als kanonische Qualitätsprüfung.
+
+on:
+  workflow_call:
+
+jobs:
+  lint:
+    name: Lint (ESLint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: ESLint ausführen
+        run: npm run lint
+
+  syntax:
+    name: Syntax & Duplikate (Renderer-Quelldateien)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Syntax-Check ausführen
+        run: npx vitest run tests/syntax.test.js
+
+  test:
+    name: Tests (Vitest)
+    runs-on: ubuntu-latest
+    needs: syntax
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Tests ausführen
+        run: npm test

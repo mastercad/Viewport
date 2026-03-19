@@ -1,0 +1,15 @@
+name: CI
+
+# Läuft bei jedem Pull Request und bei Pushes in main.
+# Branch-Protection: "CI / qa / Lint (ESLint)" und "CI / qa / Tests (Vitest)"
+# als required status checks eintragen.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  qa:
+    uses: ./.github/workflows/qa.yml

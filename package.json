@@ -5,32 +5,76 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
+    "postinstall": "patch-package",
+    "test": "vitest run",
+    "lint": "eslint src/ tests/",
+    "lint:fix": "eslint src/ tests/ --fix",
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux"
   },
+  "type": "module",
   "build": {
     "appId": "de.blickfang.app",
     "productName": "Blickfang",
-    "directories": { "output": "dist" },
+    "directories": {
+      "output": "dist"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "mastercad",
+      "repo": "Viewport"
+    },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "src/assets/icon.ico"
     },
     "linux": {
-      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "src/assets/icons",
       "category": "Utility",
-      "executableArgs": ["--no-sandbox"]
+      "executableArgs": [
+        "--no-sandbox"
+      ]
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerLanguages": ["de_DE", "en_US"],
+      "installerLanguages": [
+        "de_DE",
+        "en_US"
+      ],
       "language": "1031"
     }
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@rolldown/binding-linux-x64-gnu": "^1.0.0-rc.9",
     "electron": "^32.0.0",
-    "electron-builder": "^24.9.1"
+    "electron-builder": "^24.9.1",
+    "eslint": "^9.39.4",
+    "globals": "^15.15.0",
+    "happy-dom": "^20.8.4",
+    "jsdom": "^29.0.0",
+    "patch-package": "^8.0.1",
+    "vitest": "^2.1.9",
+    "web-push": "^3.6.7"
+  },
+  "dependencies": {
+    "@eneris/push-receiver": "^4.3.1",
+    "electron-updater": "^6.8.3"
   }
 }

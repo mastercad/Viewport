@@ -1,0 +1,141 @@
+diff --git a/node_modules/@eneris/push-receiver/dist/fcm.js b/node_modules/@eneris/push-receiver/dist/fcm.js
+index a4c6f9a..bf9d49e 100644
+--- a/node_modules/@eneris/push-receiver/dist/fcm.js
++++ b/node_modules/@eneris/push-receiver/dist/fcm.js
+@@ -105,7 +105,7 @@ async function registerFCM(gcmData, installation, keys, config) {
+         method: 'POST',
+         headers: {
+             'x-goog-api-key': config.firebase.apiKey,
+-            'x-goog-firebase-installations-auth': installation.token,
++            'x-goog-firebase-installations-auth': `FIS ${installation.token}`,
+         },
+         body: JSON.stringify({
+             web: {
+@@ -134,9 +134,11 @@ async function registerFCM(gcmData, installation, keys, config) {
+ }
+ async function register(gcm, keys, config) {
+     const installation = await installFCM(config);
+-    const registration = await registerFCM(gcm, installation, keys, config);
++    // fcmregistrations.googleapis.com now requires OAuth2 Bearer token which we
++    // don't have. We skip it and use the GCM token directly as the endpoint.
++    // The MCS login only needs androidId/securityToken, not the FCM token.
+     return {
+-        token: registration.token,
++        token: gcm.token,
+         installation
+     };
+ }
+diff --git a/node_modules/@eneris/push-receiver/dist/utils/decrypt.js b/node_modules/@eneris/push-receiver/dist/utils/decrypt.js
+index df5bb09..0afdf56 100644
+--- a/node_modules/@eneris/push-receiver/dist/utils/decrypt.js
++++ b/node_modules/@eneris/push-receiver/dist/utils/decrypt.js
+@@ -18,30 +18,43 @@ function parseHeaderParams(header) {
+     })
+         .filter(([key]) => key !== ''));
+ }
+-// https://tools.ietf.org/html/draft-ietf-webpush-encryption-03
++// https://tools.ietf.org/html/draft-ietf-webpush-encryption-03 (aesgcm)
++// https://tools.ietf.org/html/rfc8030 + aes128gcm
+ function decrypt(object, keys) {
+     const cryptoKey = object.appData.find(item => item.key === 'crypto-key');
+-    if (!cryptoKey)
+-        throw new Error('crypto-key is missing');
+-    const salt = object.appData.find(item => item.key === 'encryption');
+-    if (!salt)
+-        throw new Error('salt is missing');
+-    const cryptoKeyParams = parseHeaderParams(cryptoKey.value);
+-    const saltParams = parseHeaderParams(salt.value);
+-    if (!cryptoKeyParams.dh)
+-        throw new Error('crypto-key header is missing dh parameter');
+-    if (!saltParams.salt)
+-        throw new Error('encryption header is missing salt parameter');
+     const dh = crypto_1.default.createECDH('prime256v1');
+     dh.setPrivateKey(keys.privateKey, 'base64');
+-    const params = {
+-        version: 'aesgcm',
+-        authSecret: keys.authSecret,
+-        dh: cryptoKeyParams.dh,
+-        privateKey: dh,
+-        salt: saltParams.salt,
+-    };
+-    const decrypted = http_ece_1.default.decrypt(object.rawData, params);
+-    return JSON.parse(decrypted);
++    // Detect format: if crypto-key header present → aesgcm (old), else → aes128gcm (new)
++    if (cryptoKey) {
++        // Old aesgcm format (RFC 5116 / draft-ietf-webpush-encryption-03)
++        const salt = object.appData.find(item => item.key === 'encryption');
++        if (!salt)
++            throw new Error('salt is missing');
++        const cryptoKeyParams = parseHeaderParams(cryptoKey.value);
++        const saltParams = parseHeaderParams(salt.value);
++        if (!cryptoKeyParams.dh)
++            throw new Error('crypto-key header is missing dh parameter');
++        if (!saltParams.salt)
++            throw new Error('encryption header is missing salt parameter');
++        const params = {
++            version: 'aesgcm',
++            authSecret: keys.authSecret,
++            dh: cryptoKeyParams.dh,
++            privateKey: dh,
++            salt: saltParams.salt,
++        };
++        const decrypted = http_ece_1.default.decrypt(object.rawData, params);
++        return JSON.parse(decrypted);
++    }
++    else {
++        // New aes128gcm format (RFC 8030) - encryption params are in the payload header
++        const params = {
++            version: 'aes128gcm',
++            authSecret: keys.authSecret,
++            privateKey: dh,
++        };
++        const decrypted = http_ece_1.default.decrypt(object.rawData, params);
++        return JSON.parse(decrypted);
++    }
+ }
+ //# sourceMappingURL=decrypt.js.map
+\ No newline at end of file
+diff --git a/node_modules/@eneris/push-receiver/dist/utils/request.js b/node_modules/@eneris/push-receiver/dist/utils/request.js
+index 89f592f..2cce5b0 100644
+--- a/node_modules/@eneris/push-receiver/dist/utils/request.js
++++ b/node_modules/@eneris/push-receiver/dist/utils/request.js
+@@ -15,20 +15,9 @@ function requestWithRety(url, options, maxRetries = 3) {
+     return retry(0, url, options, maxRetries);
+ }
+ async function retry(retryCount = 0, url, options, maxRetries = 3) {
++    let response;
+     try {
+-        return await fetch(url, options)
+-            .then(async (response) => {
+-            if (response.ok)
+-                return response;
+-            // Response not ok. This means server responded but with an error. We retry with increased retry count
+-            const timeout = Math.min(retryCount * RETRY_STEP, MAX_RETRY_TIMEOUT);
+-            logger_1.default.debug(`Request failed : ${response.statusText}`);
+-            logger_1.default.debug(`Retrying in ${timeout} seconds`);
+-            if (retryCount >= maxRetries)
+-                throw response.statusText;
+-            await (0, timeout_1.default)(timeout * 1000);
+-            return retry(retryCount + 1, url, options);
+-        });
++        response = await fetch(url, options);
+     }
+     catch {
+         logger_1.default.debug('Request failed with network error. Wait 10s and retry');
+@@ -36,6 +25,16 @@ async function retry(retryCount = 0, url, options, maxRetries = 3) {
+         await (0, timeout_1.default)(10_000); // 10 seconds
+         return retry(retryCount, url, options);
+     }
++    if (response.ok)
++        return response;
++    // Response not ok. This means server responded but with an error. We retry with increased retry count
++    const timeout = Math.min(retryCount * RETRY_STEP, MAX_RETRY_TIMEOUT);
++    logger_1.default.debug(`Request failed : ${response.statusText} (HTTP ${response.status})`);
++    logger_1.default.debug(`Retrying in ${timeout} seconds`);
++    if (retryCount >= maxRetries)
++        throw new Error(`Request failed after ${maxRetries} retries: ${response.status} ${response.statusText}`);
++    await (0, timeout_1.default)(timeout * 1000);
++    return retry(retryCount + 1, url, options);
+ }
+ const getEndpoint = (config, baseUrl, path = '') => (`${baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`}projects/${config.firebase.projectId}/${path}`);
+ exports.getEndpoint = getEndpoint;

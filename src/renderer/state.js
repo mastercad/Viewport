@@ -1,14 +1,9 @@
-/**
- * Gemeinsamer App-Zustand.
- * panels: id → { def, rect, decoEl }
- *   rect: { x, y, w, h } in Workspace-relativen Koordinaten.
- *   h schließt FRAME_HEAD_H (Titelbar) ein.
- */
+// rect.h schließt FRAME_HEAD_H (Titelbar-Höhe) ein.
 export const state = {
-  panels:      new Map(),        // id -> { def, rect, scale, decoEl }
+  panels:      new Map(),
   wsRect:      { x: 0, y: 0, w: 0, h: 0 },
   topId:       null,
-  panelScale:  1.0,              // globaler Default-Scale für neue Panels
+  panelScale:  1.0,
   snapEnabled: true,
 };
 
@@ -17,10 +12,7 @@ export function normalizeWsRect(r) {
   return { x: r.x ?? 0, y: r.y ?? 0, w: r.w ?? r.width ?? 800, h: r.h ?? r.height ?? 600 };
 }
 
-/** Klemmt rect vollständig in den Workspace.
- *  Verwendet die VISUELLE Größe (rect * scale), damit skalierte Panels
- *  den vollen Workspace nutzen können.
- */
+// Klemmt gegen visuelle Größe (rect * scale), nicht gegen rect-Wert direkt.
 export function clampRect(r, scale) {
   const s = scale ?? state.panelScale;
   return {
@@ -30,7 +22,6 @@ export function clampRect(r, scale) {
   };
 }
 
-/** CSS-Position des Deko-Elements aktualisieren (inkl. Skalierungs-Transform). */
 export function applyDecoRect({ rect, decoEl, scale }) {
   const s = scale ?? state.panelScale;
   decoEl.style.left      = rect.x + 'px';

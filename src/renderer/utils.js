@@ -1,4 +1,3 @@
-/** Sicherstellt, dass eine URL ein Schema hat. */
 export function normalizeUrl(raw) {
   if (/^https?:\/\//i.test(raw)) return raw;
   if (/^localhost|^127\.|^\d+\.\d+\.\d+\.\d+/.test(raw)) return 'http://' + raw;

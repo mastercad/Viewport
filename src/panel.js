@@ -1,5 +1,4 @@
 'use strict';
-/* panel.js – läuft im Renderer-Prozess des Panel-BrowserWindows */
 
 const wv          = document.getElementById('wv');
 const cloneOverlay= document.getElementById('clone-overlay');
@@ -10,12 +9,10 @@ const dotClose    = document.getElementById('dot-close');
 const dotMax      = document.getElementById('dot-max');
 const dotFocus    = document.getElementById('dot-focus');
 
-// ── Zustand ───────────────────────────────────────────────────────────────────
-let cfg          = null;   // Panel-Konfiguration ({ id, def, url })
-let wvDomReady   = false;  // Webview-DOM ist bereit
+let cfg          = null;
+let wvDomReady   = false;
 let vpUrlApplied = false;  // Guard: Viewport+URL nur einmal konfigurieren
 
-// ── Konfiguration laden ───────────────────────────────────────────────────────
 function getCfg() {
   return window.panelCfg || window.__PANEL_CFG__ || null;
 }
@@ -49,16 +46,14 @@ if (initial) {
   }, 20);
 }
 
-// ── Webview-Events ────────────────────────────────────────────────────────────
 wv.addEventListener('dom-ready', () => {
   wvDomReady = true;
   applyViewportAndUrl();
 });
 
-// Zustand der aktuellen Navigation
-let navFailed  = false;  // did-fail-load wurde seit did-start-loading ausgelöst
-let isLoading  = false;  // webview lädt gerade
-let isSyncNav  = false;  // aktuelle Navigation wurde per Sync-Befehl ausgelöst
+let navFailed  = false;
+let isLoading  = false;
+let isSyncNav  = false;
 let pendingNav = null;   // aufgeschobene Navigation: { url, sync }
 
 wv.addEventListener('did-start-loading', () => { navFailed = false; isLoading = true; });
@@ -90,12 +85,11 @@ wv.addEventListener('did-navigate-in-page', e => {
   window.panelApi.navigated(cfg.id, e.url);
 });
 
-// ── URL laden ─────────────────────────────────────────────────────────────────
 // isSync=true → Navigation kommt vom Sync-System, nicht vom Nutzer.
 function loadUrl(url, isSync = false) {
   if (!url || url === 'about:blank') return;
   const current = wv.getURL();
-  if (current === url && !isLoading) return; // bereits dort
+  if (current === url && !isLoading) return;
 
   // Sync + gleicher Origin + nicht am Laden →
   // SPA-Navigation via history.pushState + popstate-Event.
@@ -121,12 +115,10 @@ function loadUrl(url, isSync = false) {
   wv.src = url;
 }
 
-// ── Titelbar-Buttons ──────────────────────────────────────────────────────────
 dotClose.addEventListener( 'click', () => { if (cfg) window.panelApi.close(cfg.id); });
 dotMax.addEventListener(   'click', () => { if (cfg) window.panelApi.toggleMaximize(cfg.id); });
 dotFocus.addEventListener( 'click', () => { if (cfg) window.panelApi.toggleFocus(cfg.id); });
 
-// ── Befehle vom Main-Prozess ──────────────────────────────────────────────────
 window.panelApi.onCommand((cmd, data) => {
   switch (cmd) {
     case 'navigate':
@@ -139,7 +131,6 @@ window.panelApi.onCommand((cmd, data) => {
   }
 });
 
-// ── Resize-Handle ─────────────────────────────────────────────────────────────
 document.getElementById('resize-handle').addEventListener('mousedown', e => {
   e.preventDefault();
   if (cfg) window.panelApi.startResize(cfg.id, { x: e.screenX, y: e.screenY });

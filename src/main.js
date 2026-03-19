@@ -1,48 +1,34 @@
-'use strict';
+import { app, BrowserWindow, ipcMain, screen, session, Menu, globalShortcut, webContents, net, shell } from 'electron';
+import path    from 'path';
+import fs      from 'fs';
+import { fileURLToPath } from 'url';
+import updaterPkg from 'electron-updater';
+import { initPushBridge } from './push-bridge.js';
+const { autoUpdater } = updaterPkg;
 
-const {
-  app, BrowserWindow, ipcMain,
-  screen, session, Menu, globalShortcut
-} = require('electron');
-const path = require('path');
-const fs   = require('fs');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 
-// ── Push-Notification-Keys früh laden und an Chromium übergeben ─────────────
-// app.commandLine.appendSwitch() muss VOR app.isReady() aufgerufen werden.
+// Auf Linux fehlt oft das SUID-Sandbox-Setup → no-sandbox als Fallback.
+if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
+
 {
   const _kp = path.join(app.getPath('userData'), 'api-keys.json');
   try {
     const _k = JSON.parse(fs.readFileSync(_kp, 'utf8'));
-    if (_k.apiKey)       app.commandLine.appendSwitch('google-api-key',        _k.apiKey);
-    if (_k.clientId)     app.commandLine.appendSwitch('oauth2-client-id',      _k.clientId);
-    if (_k.clientSecret) app.commandLine.appendSwitch('oauth2-client-secret',  _k.clientSecret);
-  } catch { /* Noch nicht konfiguriert – kein Problem */ }
+    // Der google-api-key-Switch allein genügt Electron nicht (kein GCM-Treiber).
+    // push-bridge.js übernimmt das FCM-Protokoll komplett in Node.js.
+    if (_k.apiKey) app.commandLine.appendSwitch('google-api-key', _k.apiKey);
+  } catch { /* api-keys.json fehlt noch, push-bridge arbeitet trotzdem */ }
 }
 
-// ── Sicherheit: Context-Isolation erzwingen ──────────────────────────────────
-// Unter Linux (AppImage) fehlt die SUID-chrome-sandbox → --no-sandbox setzen.
-// Sicherheit wird stattdessen über contextIsolation + nodeIntegration:false
-// in allen webPreferences sichergestellt.
-//if (process.platform === 'linux') {
-  // AppImage hat kein SUID-chrome-sandbox → Sandbox deaktivieren.
-  // Sicherheit läuft über contextIsolation + nodeIntegration:false.
-  // Hinweis: bei AppImage muss --no-sandbox auch via Wrapper-Script übergeben
-  // werden (siehe scripts/after-pack.js), da dieser JS-Code für den Sandbox-
-  // Check zu spät kommt.
-  // app.commandLine.appendSwitch('no-sandbox');
-//}
-
-// ── Hauptfenster & View-Verwaltung ──────────────────────────────────────────
 let mainWin = null;
 
-// ── App ready ────────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
-  // Desktop-Session: CSP/X-Frame-Options-Stripping + Permissions
   setupSession(session.fromPartition('persist:desktop', { cache: true }));
-
+  initPushBridge();
   createMainWindow();
 
-  // Panel-Webviews: Session-Setup + User-Agent sobald ein neuer WebContents erzeugt wird
   const _setupDone = new Set();
   app.on('web-contents-created', (_e, contents) => {
     if (contents.getType() !== 'webview') return;
@@ -53,20 +39,40 @@ app.whenReady().then(() => {
       setupSession(ses);
     }
     contents.setUserAgent(
-      'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36'
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     );
+    // ERR_ABORTED (-3) taucht bei Auth-Redirects auf – harmlos.
+    contents.on('did-fail-load', (_e, code) => { if (code === -3) return; });
   });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
+
+  if (app.isPackaged) {
+    autoUpdater.autoDownload         = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('update-available', info => {
+      mainWin?.webContents.send('updater:available', info.version);
+    });
+    autoUpdater.on('update-downloaded', info => {
+      mainWin?.webContents.send('updater:downloaded', info.version);
+    });
+    autoUpdater.on('error', err => {
+      if (/no published versions/i.test(err.message)) return; // kein echter Fehler
+      console.log('[updater]', err.message);
+    });
+
+    autoUpdater.checkForUpdates().catch(() => {});
+    setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1000);
+  }
 });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// ── Hauptfenster erstellen ───────────────────────────────────────────────────
 function createMainWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
@@ -83,14 +89,12 @@ function createMainWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webviewTag:      true,    // für eingebettete Desktop-WebView
+      webviewTag: true,
     },
   });
 
   mainWin.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
-  // Menü mit Tastaturkürzel: Ctrl+Shift+S schaltet Sync um – funktioniert auch
-  // wenn ein WebContentsView den Keyboard-Fokus hat (Menu-Accelerator ist OS-level)
   const menu = Menu.buildFromTemplate([{
     label: 'Ansicht', submenu: [
       { label:       'Synchronisation umschalten',
@@ -103,7 +107,6 @@ function createMainWindow() {
   }]);
   Menu.setApplicationMenu(menu);
 
-  // Renderer-Crash anzeigen statt stillschweigend scheitern
   mainWin.webContents.on('render-process-gone', (_e, details) => {
     console.error('[Blickfang] Renderer crashed:', details.reason, details.exitCode);
   });
@@ -111,23 +114,17 @@ function createMainWindow() {
     console.error('[Blickfang] did-fail-load:', code, desc, url);
   });
 
-  // DevTools nur während der Entwicklung (nicht im gebauten AppImage)
   if (!app.isPackaged) mainWin.webContents.openDevTools();
 
-  // Panel-Views brauchen neue Bounds wenn das Fenster resized wird
   mainWin.on('resize', () => mainWin?.webContents.send('window:resized'));
 
-  // Vollbild: globale Shortcuts registrieren damit der Desktop-Webview sie nicht verschluckt
-  // F11 einmalig als Toggle registrieren – nie mehr deregistrieren, damit es nach jedem
-  // Vollbild-Zyklus (auch durch Website-requestFullscreen) zuverlässig bleibt.
   globalShortcut.register('F11', () => {
     if (mainWin) mainWin.setFullScreen(!mainWin.isFullScreen());
   });
 
   mainWin.on('enter-full-screen', () => {
     mainWin?.webContents.send('window:fullscreen', true);
-    // Escape nur im Vollbild registrieren (würde sonst andere Escape-Aktionen stören)
-    globalShortcut.register('Escape', exitFullScreen);
+    globalShortcut.register('Escape', exitFullScreen); // nur im Vollbild, sonst stört Escape
   });
   mainWin.on('leave-full-screen', () => {
     globalShortcut.unregister('Escape');
@@ -140,7 +137,6 @@ function createMainWindow() {
   });
 }
 
-// ── Session-Setup: CSP-Stripping + Permissions (Desktop & Panels) ────────────
 const ALLOWED_PERMISSIONS = new Set([
   'notifications', 'push', 'media', 'mediaKeySystem',
   'geolocation', 'clipboard-read', 'clipboard-sanitized-write',
@@ -148,6 +144,10 @@ const ALLOWED_PERMISSIONS = new Set([
 ]);
 
 function setupSession(ses) {
+  // Preload für alle Seiten in dieser Session (also Webview-Inhalte).
+  // Überschreibt PushManager.subscribe() mit unserer FCM-Bridge.
+  ses.setPreloads([path.join(__dirname, 'push-webview-preload.js')]);
+
   ses.webRequest.onHeadersReceived((details, callback) => {
     const headers = { ...details.responseHeaders };
     delete headers['x-frame-options'];
@@ -165,40 +165,61 @@ function setupSession(ses) {
   );
 }
 
-// ── IPC: API-Keys laden ──────────────────────────────────────────────────────
-const { safeStorage, app: _app } = require('electron');
-const _keysPath = require('path').join(
-  require('electron').app.getPath('userData'), 'api-keys.json'
-);
+const _keysPath = path.join(app.getPath('userData'), 'api-keys.json');
 ipcMain.handle('keys:load', () => {
   try {
-    const raw = require('fs').readFileSync(_keysPath);
+    const raw = fs.readFileSync(_keysPath);
     return JSON.parse(raw.toString());
   } catch { return {}; }
 });
 
-// ── IPC: API-Keys speichern ──────────────────────────────────────────────────
 ipcMain.handle('keys:save', (_e, keys) => {
   try {
-    require('fs').writeFileSync(_keysPath, JSON.stringify(keys));
+    fs.writeFileSync(_keysPath, JSON.stringify(keys));
     return true;
   } catch { return false; }
 });
 
-// ── IPC: Zoom (kein Panel-IPC mehr nötig, webview skaliert per CSS) ──────────
-// Nur noch onWindowResize-Event für Workspace-Bounds
+ipcMain.handle('panel:setViewport', async (_e, { wvId, w, h, mobile, ua }) => {
+  const wc = webContents.fromId(wvId);
+  if (!wc || wc.isDestroyed()) return;
+  if (ua) wc.setUserAgent(ua);
 
-// ── IPC: Workspace-Bereich melden (für korrekte Bounds-Berechnung) ────────────
+  if (mobile) {
+    wc.enableDeviceEmulation({
+      screenPosition:    'mobile',
+      screenSize:        { width: w, height: h },
+      viewPosition:      { x: 0, y: 0 },
+      deviceScaleFactor: 0,
+      scale:             1,
+    });
+    if (!wc.debugger.isAttached()) {
+      try { wc.debugger.attach('1.3'); } catch (_) { /* already attached */ }
+    }
+    if (wc.debugger.isAttached()) {
+      await wc.debugger.sendCommand('Emulation.setTouchEmulationEnabled', {
+        enabled: true, maxTouchPoints: 5,
+      }).catch(() => {});
+    }
+  } else {
+    wc.disableDeviceEmulation();
+    if (wc.debugger.isAttached()) {
+      await wc.debugger.sendCommand('Emulation.setTouchEmulationEnabled', {
+        enabled: false, maxTouchPoints: 0,
+      }).catch(() => {});
+    }
+  }
+});
+
 ipcMain.handle('workspace:getBounds', () => {
   if (!mainWin) return null;
   const [winW, winH] = mainWin.getContentSize();
   const fullscreen    = mainWin.isFullScreen();
-  const topOffset     = fullscreen ? 0 : 110;   // header (60) + device-bar (50)
-  const bottomOffset  = fullscreen ? 0 : 60;     // toolbar
+  const topOffset     = fullscreen ? 0 : 110;  // header 60 + device-bar 50
+  const bottomOffset  = fullscreen ? 0 : 60;   // toolbar
   return { x: 0, y: topOffset, width: winW, height: winH - topOffset - bottomOffset };
 });
 
-// ── IPC: Screenshot eines DOM-Rects (inkl. CSS-Geräterahmen) ────────────────────────
 const _ZERO = v => Math.max(0, Math.round(v));
 ipcMain.handle('screenshot:capture-rect', (_e, rect) => {
   if (!mainWin) return null;
@@ -208,9 +229,132 @@ ipcMain.handle('screenshot:capture-rect', (_e, rect) => {
     .catch(() => null);
 });
 
-// ── IPC: Vollbild-Modus ──────────────────────────────────────────────────────
+// Direkt die WebContents eines beliebigen Webview capen
+ipcMain.handle('screenshot:capture-wv', (_e, wvId) => {
+  const wc = webContents.fromId(wvId);
+  if (!wc) return null;
+  return wc.capturePage()
+    .then(img => img.toPNG().toString('base64'))
+    .catch(() => null);
+});
+
+// Desktop-Webview: Viewport per enableDeviceEmulation auf Zielgröße forcieren,
+// dann capen, dann Emulation wieder deaktivieren – alles im Main-Prozess,
+// keine CSS-Manipulation und kein Polling aus dem Renderer nötig.
+ipcMain.handle('screenshot:capture-desktop-wv', async (_e, wvId) => {
+  const wc = webContents.fromId(wvId);
+  if (!wc || wc.isDestroyed() || !mainWin) return null;
+  const [winW, winH] = mainWin.getContentSize();
+  const fullscreen   = mainWin.isFullScreen();
+  const topOffset    = fullscreen ? 0 : 110;  // header 60 + device-bar 50
+  const botOffset    = fullscreen ? 0 : 60;   // toolbar
+  const captureH     = winH - topOffset;       // Workspace + Toolbar (= was der Benutzer sieht)
+  const wsH          = winH - topOffset - botOffset; // nur Workspace (ohne Toolbar)
+  try {
+    wc.enableDeviceEmulation({
+      screenPosition:    'desktop',
+      screenSize:        { width: winW, height: captureH },
+      viewPosition:      { x: 0, y: 0 },
+      deviceScaleFactor: 0,
+      scale:             1,
+    });
+    // Kurz warten bis der Gast-Prozess den neuen Viewport gerendert hat
+    await new Promise(r => setTimeout(r, 350));
+    const img = await wc.capturePage();
+    return { png: img.toPNG().toString('base64'), w: winW, h: captureH, wsH };
+  } catch { return null; }
+  finally {
+    try { wc.disableDeviceEmulation(); } catch {}
+  }
+});
+
 ipcMain.handle('window:setFullScreen', (_e, flag) => {
   mainWin?.setFullScreen(!!flag);
+});
+
+ipcMain.on('updater:install', () => {
+  autoUpdater.quitAndInstall();
+});
+
+// Neustart nach Schlüssel-Konfiguration – commandLine.appendSwitch() wirkt nur
+// beim nächsten Prozess-Start, daher app.relaunch() + app.exit().
+ipcMain.handle('app:restart', () => {
+  app.relaunch();
+  app.exit(0);
+});
+
+// Öffnet externe Links im System-Browser – nur https: und mailto: erlaubt.
+ipcMain.handle('shell:openExternal', (_e, url) => {
+  let parsed;
+  try { parsed = new URL(url); } catch { return; }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'mailto:') return;
+  shell.openExternal(url);
+});
+
+// Laufzeit-Diagnose: Zeigt, welche Schlüssel beim Start tatsächlich geladen
+// wurden und ob die commandLine-Switches gesetzt sind.
+ipcMain.handle('keys:diagnose', async () => {
+  const ses = session.fromPartition('persist:desktop');
+  const sessionStoragePath = ses.storagePath;
+
+  // GCM Store liegt im tatsächlichen storagePath der Session (nicht angenommener Pfad)
+  const gcmStorePath    = sessionStoragePath ? path.join(sessionStoragePath, 'GCM Store') : '(kein storagePath)';
+  const gcmStoreExists  = sessionStoragePath ? fs.existsSync(gcmStorePath) : false;
+
+  // FCM-Erreichbarkeit aus der persist:desktop-Session testen.
+  const fcmTest = await new Promise(resolve => {
+    try {
+      const req = net.request({
+        method:  'GET',
+        url:     'https://fcm.googleapis.com/',
+        session: session.fromPartition('persist:desktop'),
+      });
+      const t = setTimeout(() => resolve({ ok: false, error: 'timeout (5s)' }), 5000);
+      req.on('response', res => { clearTimeout(t); resolve({ ok: true, status: res.statusCode }); });
+      req.on('error',    err => { clearTimeout(t); resolve({ ok: false, error: err.message }); });
+      req.end();
+    } catch (e) { resolve({ ok: false, error: e.message }); }
+  });
+
+  // GCM Checkin-Endpunkt testen (dieser Schritt initialisiert den GCM-Treiber)
+  const checkinTest = await new Promise(resolve => {
+    try {
+      const req = net.request({
+        method:  'POST',
+        url:     'https://android.clients.google.com/checkin',
+        session: session.fromPartition('persist:desktop'),
+      });
+      const t = setTimeout(() => resolve({ ok: false, error: 'timeout (5s)' }), 5000);
+      req.on('response', res => { clearTimeout(t); resolve({ ok: true, status: res.statusCode }); });
+      req.on('error',    err => { clearTimeout(t); resolve({ ok: false, error: err.message }); });
+      req.end();
+    } catch (e) { resolve({ ok: false, error: e.message }); }
+  });
+
+  return {
+    userData:         app.getPath('userData'),
+    keysFile:         _keysPath,
+    hasApiKey:        app.commandLine.hasSwitch('google-api-key'),
+    apiKeyPrefix:     app.commandLine.getSwitchValue('google-api-key').slice(0, 8) || '(leer)',
+    sessionStorePath: sessionStoragePath ?? '(null)',
+    gcmStoreExists,
+    gcmStorePath,
+    fcmReachable:     fcmTest.ok,
+    fcmResult:        fcmTest.ok ? `HTTP ${fcmTest.status}` : `FEHLER: ${fcmTest.error}`,
+    checkinReachable: checkinTest.ok,
+    checkinResult:    checkinTest.ok ? `HTTP ${checkinTest.status}` : `FEHLER: ${checkinTest.error}`,
+    electron:         process.versions.electron,
+    chrome:           process.versions.chrome,
+    platform:         process.platform,
+  };
+});
+
+// Service-Worker + GCM-State der persist:desktop-Session löschen,
+// damit Push-Subscription beim nächsten Besuch neu registriert wird.
+ipcMain.handle('session:clearPush', async () => {
+  const ses = session.fromPartition('persist:desktop');
+  await ses.clearStorageData({ storages: ['serviceworkers'] });
+  return true;
 });
 
 function exitFullScreen() {

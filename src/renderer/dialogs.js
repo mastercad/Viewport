@@ -1,9 +1,6 @@
 import { addPanel } from './panels.js';
 import { toast }    from './utils.js';
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Custom-Dialog – eigene Bildschirmgröße
-   ══════════════════════════════════════════════════════════════════════════ */
 const customDlg = document.getElementById('custom-dlg');
 const dlgW      = document.getElementById('f-w');
 const dlgH      = document.getElementById('f-h');
@@ -43,24 +40,30 @@ for (const btn of document.querySelectorAll('.preset')) {
   btn.addEventListener('click', () => { dlgW.value = btn.dataset.w; dlgH.value = btn.dataset.h; });
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Keys-Dialog – Google-API-Zugangsdaten
-   ══════════════════════════════════════════════════════════════════════════ */
-const keysDlg = document.getElementById('keys-dlg');
-const kApi    = document.getElementById('k-api');
-const kCid    = document.getElementById('k-cid');
-const kSec    = document.getElementById('k-sec');
+const keysDlg  = document.getElementById('keys-dlg');
+const kApi     = document.getElementById('k-api');
+const kAppId   = document.getElementById('k-app-id');
+const kProject = document.getElementById('k-project');
+const kSender  = document.getElementById('k-sender');
 
 async function openKeysDlg() {
   try {
     const saved = await window.ss.keysLoad();
-    kApi.value = saved.apiKey       ?? '';
-    kCid.value = saved.clientId     ?? '';
-    kSec.value = saved.clientSecret ?? '';
+    kApi.value     = saved.apiKey            ?? '';
+    kAppId.value   = saved.appId             ?? '';
+    kProject.value = saved.projectId         ?? '';
+    kSender.value  = saved.messagingSenderId ?? '';
   } catch { /* Felder leer lassen */ }
+  // Diagnose-Panel leeren und verstecken
+  const diagWrap = document.getElementById('keys-diag-wrap');
+  const diagOut  = document.getElementById('keys-diag-out');
+  if (diagOut)  diagOut.textContent = '';
+  if (diagWrap) diagWrap.classList.add('hidden');
   keysDlg.classList.remove('hidden');
   kApi.focus();
 }
+
+export { openKeysDlg };
 
 function closeKeysDlg() {
   keysDlg.classList.add('hidden');
@@ -77,11 +80,68 @@ keysDlg.addEventListener('keydown', e => { if (e.key === 'Escape') closeKeysDlg(
 
 document.getElementById('keys-dlg-save').addEventListener('click', async () => {
   const keys = {
-    apiKey:       kApi.value.trim(),
-    clientId:     kCid.value.trim(),
-    clientSecret: kSec.value.trim(),
+    apiKey:            kApi.value.trim(),
+    appId:             kAppId.value.trim(),
+    projectId:         kProject.value.trim(),
+    messagingSenderId: kSender.value.trim(),
   };
   await window.ss.keysSave(keys);
   closeKeysDlg();
-  toast('Gespeichert – App neu starten, damit die Änderungen wirksam werden', 'success', 4000);
+  toast('Gespeichert – App wird in 2 Sekunden neu gestartet…', 'success', 2500);
+  setTimeout(() => window.ss.appRestart(), 2000);
+});
+
+// ── Diagnose-Button ───────────────────────────────────────────────────────────
+function _showDiag(text) {
+  const diagWrap = document.getElementById('keys-diag-wrap');
+  const diagOut  = document.getElementById('keys-diag-out');
+  diagOut.textContent = text;
+  diagWrap.classList.remove('hidden');
+}
+
+document.getElementById('keys-diag-btn').addEventListener('click', async () => {
+  _showDiag('Lade…');
+  try {
+    const d = await window.ss.keysDiagnose();
+    _showDiag([
+      `userData:         ${d.userData}`,
+      `Datei:            ${d.keysFile}`,
+      `google-api-key:   ${d.hasApiKey ? '✓ gesetzt (' + d.apiKeyPrefix + '…)' : '✗ NICHT gesetzt'}`,
+      ``,
+      `Session-Pfad:     ${d.sessionStorePath}`,
+      `GCM Store:        ${d.gcmStoreExists ? '✓ vorhanden' : '✗ FEHLT – GCM hat noch nie eingecheckt!'}`,
+      `GCM Store Pfad:   ${d.gcmStorePath}`,
+      ``,
+      `FCM erreichbar:   ${d.fcmReachable ? '✓' : '✗'}  ${d.fcmResult}`,
+      `GCM Checkin:      ${d.checkinReachable ? '✓' : '✗'}  ${d.checkinResult}`,
+      ``,
+      `Electron:         ${d.electron}  |  Chrome: ${d.chrome}`,
+      `Plattform:        ${d.platform}`,
+    ].join('\n'));
+  } catch (e) {
+    _showDiag('Fehler: ' + e.message);
+  }
+});
+
+// ── Push-Status zurücksetzen ──────────────────────────────────────────────────
+document.getElementById('keys-clear-push-btn').addEventListener('click', async () => {
+  _showDiag('Service-Worker werden zurückgesetzt…');
+  try {
+    await window.ss.sessionClearPush();
+    _showDiag('✓ Service-Worker gelöscht – bitte Seite im Webview neu laden,\ndann Push-Subscription erneut versuchen.');
+  } catch (e) {
+    _showDiag('Fehler: ' + e.message);
+  }
+});
+
+// ── Kopieren-Button ─────────────────────────────────────────────────────────
+document.getElementById('keys-diag-copy').addEventListener('click', async () => {
+  const text = document.getElementById('keys-diag-out').textContent;
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('keys-diag-copy');
+    btn.textContent = '✓ Kopiert';
+    setTimeout(() => { btn.textContent = 'Kopieren'; }, 1800);
+  } catch { /* clipboard not available */ }
 });

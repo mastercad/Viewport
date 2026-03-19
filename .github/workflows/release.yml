@@ -1,4 +1,4 @@
-name: Release AppImage
+name: Release
 
 on:
   push:
@@ -9,26 +9,43 @@ permissions:
   contents: write   # für das Erstellen von Releases und Tags
 
 jobs:
+  # ── Qualitätsprüfung (Lint + Tests) via zentralem QA-Workflow ────────────
+  qa:
+    uses: ./.github/workflows/qa.yml
+
+  # ── Version einmalig lesen, damit beide Build-Jobs denselben Tag verwenden ─
+  version:
+    needs: [qa]   # Build startet nur wenn Lint + Tests grün sind
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.pkg.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: pkg
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+  # ── Linux AppImage ──────────────────────────────────────────────────────
   build-linux:
+    needs: version
     runs-on: ubuntu-latest
 
     steps:
-      # ── Checkout ────────────────────────────────────────────────────────
+      # ── Checkout ──────────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Node.js ─────────────────────────────────────────────────────────
+      # ── Node.js ───────────────────────────────────────────────────────
       - name: Node.js einrichten
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      # ── Abhängigkeiten ───────────────────────────────────────────────────
+      # ── Abhängigkeiten ────────────────────────────────────────────────
       - name: Abhängigkeiten installieren
         run: npm ci
 
-      # ── Linux-Systempakete für electron-builder / AppImage ───────────────
+      # ── Linux-Systempakete für electron-builder / AppImage ─────────────
       - name: Systempakete installieren
         run: |
           sudo apt-get update -y
@@ -44,30 +61,86 @@ jobs:
             fuse \
             rpm
 
-      # ── Version aus package.json lesen ──────────────────────────────────
-      - name: Version lesen
-        id: pkg
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
-      # ── AppImage bauen ───────────────────────────────────────────────────
+      # ── AppImage bauen ─────────────────────────────────────────────────
       - name: AppImage bauen
         run: npm run build:linux
         env:
-          # Kein GH_TOKEN → electron-builder publiziert nicht selbst;
-          # wir laden das Artefakt manuell hoch (nächster Schritt).
           NODE_ENV: production
 
-      # ── Release erstellen und AppImage hochladen ─────────────────────────
+      # ── Artefakt für den Release-Job bereitstellen ─────────────────────
+      - name: Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-dist
+          path: dist/*.AppImage
+
+  # ── Windows NSIS-Installer ──────────────────────────────────────────────
+  build-windows:
+    needs: version
+    runs-on: windows-latest
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Node.js ───────────────────────────────────────────────────────
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # ── Abhängigkeiten ────────────────────────────────────────────────
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      # ── Windows-Installer bauen ────────────────────────────────────────
+      - name: Windows-Installer bauen
+        run: npm run build:win
+        env:
+          NODE_ENV: production
+
+      # ── Artefakt für den Release-Job bereitstellen ─────────────────────
+      - name: Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-dist
+          path: dist/*.exe
+
+  # ── Gemeinsamen GitHub Release erstellen ────────────────────────────────
+  release:
+    needs: [version, build-linux, build-windows]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Linux-Artefakt herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-dist
+          path: dist
+
+      - name: Windows-Artefakt herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-dist
+          path: dist
+
       - name: GitHub Release erstellen
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.pkg.outputs.version }}-build.${{ github.run_number }}
-          name: v${{ steps.pkg.outputs.version }} (Build ${{ github.run_number }})
+          tag_name: v${{ needs.version.outputs.version }}-build.${{ github.run_number }}
+          name: v${{ needs.version.outputs.version }} (Build ${{ github.run_number }})
           body: |
             Automatisch gebaut aus Commit ${{ github.sha }} auf `main`.
 
             **Änderungen in diesem Commit:**
             ${{ github.event.head_commit.message }}
-          files: dist/*.AppImage
+
+            | Plattform | Datei |
+            |---|---|
+            | Linux | `Blickfang-${{ needs.version.outputs.version }}.AppImage` |
+            | Windows | `Blickfang Setup ${{ needs.version.outputs.version }}.exe` |
+          files: dist/*
           draft: false
           prerelease: false

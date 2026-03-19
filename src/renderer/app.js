@@ -1,18 +1,3 @@
-/**
- * Blickfang · app.js  (Renderer-Einstiegspunkt)
- *
- * Importiert alle Fachmodule und verdrahtet IPC-Events,
- * Navigation, Sync, Chips und Tastaturkürzel.
- *
- * Modulstruktur:
- *   constants.js  – PRESETS, Schwellwerte, Konstanten
- *   state.js      – Gemeinsamer Zustand + Geometrie-Hilfen
- *   utils.js      – normalizeUrl, sleep, toast
- *   panels.js     – Panel-Lifecycle, Drag, Resize, Snap,
- *                   Maximize, Arrange, Fokus-Modus
- *   screenshot.js – Screenshot-Capture + Downloads
- *   dialogs.js    – Custom-, Hilfe- und Keys-Dialog
- */
 import { state, normalizeWsRect, clampRect, applyDecoRect } from './state.js';
 import { FRAME_HEAD_H } from './constants.js';
 import { normalizeUrl, toast }        from './utils.js';
@@ -23,11 +8,12 @@ import {
   isWvReady, addPanel, registerCustomDevice,
 } from './panels.js';
 import { wireScreenshot, captureScreenshot } from './screenshot.js';
-import { wireAnnotate } from './annotate.js';
-import { loadLayout, loadCustomDevices, saveCustomDevice, clearLayout } from './storage.js';
-import './dialogs.js';
+import { wireEditor } from './editor/index.js';
+import { loadLayout, saveLayout, loadCustomDevices, saveCustomDevice, deleteCustomDevice, clearLayout,
+  BUILTIN_TEMPLATES, loadTemplates, saveTemplate, deleteTemplate } from './storage.js';
+import { openKeysDlg } from './dialogs.js';
 
-/* ── DOM-Refs ────────────────────────────────────────────────────────────── */
+/* ── DOM-Refs ── */
 const urlInput   = document.getElementById('url-input');
 const urlForm    = document.getElementById('url-form');
 const clearBtn   = document.getElementById('clear-btn');
@@ -38,18 +24,12 @@ const scaleSlider = document.getElementById('scale-slider');
 const scaleLabel  = document.getElementById('scale-label');
 
 let syncEnabled  = true;
-let _desktopUrl  = '';     // aktuelle URL der Desktop-View
+let _desktopUrl   = '';
 let _desktopReady = false; // true nach did-finish-load, false beim nächsten did-start-loading
-let _suppressPanelSync = false; // gesperrt während Click-Forwarding → verhindert Panel→Desktop Feedback-Loop
+let _suppressPanelSync = false; // verhindert Panel→Desktop-Feedback-Loop beim Click-Forwarding
 let _suppressTimer     = null;
-let _isRestoring       = false; // gesperrt während Session-Restore → verhindert ERR_ABORTED durch Doppel-Navigation
+let _isRestoring       = false; // gesperrt während Session-Restore – verhindert ERR_ABORTED durch Doppel-Navigation
 
-/**
- * Navigiert den Desktop-WebView zur Ziel-URL.
- * Ist die Origin identisch (gleiche SPA), wird history.pushState + popstate
- * verwendet damit der SPA-Router direkt navigiert – kein Server-Roundtrip,
- * kein "/"-Flash durch Redirect-Ketten.
- */
 function desktopNavigateSmart(url) {
   let sameOrigin = false;
   try {
@@ -58,7 +38,6 @@ function desktopNavigateSmart(url) {
 
   if (sameOrigin) {
     if (!_desktopReady) {
-      // Webview noch nicht bereit – loadURL vermeidet GUEST_VIEW_MANAGER-Fehler
       desktopWv.loadURL(url);
       return;
     }
@@ -81,11 +60,16 @@ function desktopNavigateSmart(url) {
 async function init() {
   state.wsRect = normalizeWsRect(await window.ss.getWorkspace());
   positionSnapGuides();
+  // Startup-Hinweis wenn Google-API-Key fehlt (Push-Notifications funktionieren dann nicht).
+  window.ss.keysLoad().then(k => {
+    if (!k.apiKey) toast('⚠ Push-Notifications: kein Google-API-Key konfiguriert – bitte 🔑 öffnen.', 'info', 9000);
+  }).catch(() => {});
   wireScreenshot();
-  wireAnnotate();
+  wireEditor();
   wireNavigation();
   wireSync();
   wireChips();
+  wireTemplates();
   wireScale();
   wireIpcEvents();
   wireShortcuts();
@@ -98,33 +82,48 @@ async function init() {
 function addCustomChip(def) {
   const chips     = document.getElementById('chips');
   const customBtn = document.getElementById('custom-btn');
-  // Kein Duplikat einfügen
   if (chips.querySelector(`[data-preset="${CSS.escape(def.id)}"]`)) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'chip-wrap';
+
   const chip = document.createElement('button');
   chip.className    = 'chip';
   chip.dataset.preset = def.id;
   chip.title = `${def.label} – ${def.w}×${def.h}`;
   chip.innerHTML = `<span>${def.label}</span><span class="chip-size">${def.w}×${def.h}</span>`;
   chip.addEventListener('click', () => openPreset(def.id));
-  chips.insertBefore(chip, customBtn);
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'chip-del';
+  delBtn.title = `„${def.label}“ aus der Liste entfernen`;
+  delBtn.setAttribute('aria-label', `${def.label} entfernen`);
+  delBtn.textContent = '✕';
+  delBtn.addEventListener('click', () => {
+    for (const [id, p] of state.panels) {
+      if (p.def.id === def.id) { removePanel(id); break; }
+    }
+    deleteCustomDevice(def.id);
+    wrap.remove();
+  });
+
+  wrap.appendChild(chip);
+  wrap.appendChild(delBtn);
+  chips.insertBefore(wrap, customBtn);
 }
 
-/* Gespeichertes Layout + eigene Geräte wiederherstellen */
 async function restoreSession() {
-  // 1. Eigene Geräte als Chips einblenden (immer)
   const customs = loadCustomDevices();
   for (const def of customs) {
     registerCustomDevice(def);
     addCustomChip(def);
   }
-  // 2. Panel-Layout nur wiederherstellen wenn vorhanden und User bestätigt
   const saved = loadLayout();
   if (!saved.length) return;
 
   const restore = await new Promise(resolve => {
     const id = 'session-restore-' + Date.now();
     const msg = `Letzte Session wiederherstellen? (${saved.length} Panel${saved.length !== 1 ? 's' : ''})`;
-    // Kleines Banner oben einblenden
     const banner = document.createElement('div');
     banner.id = id;
     banner.style.cssText = [
@@ -144,8 +143,7 @@ async function restoreSession() {
     const cleanup = val => { banner.remove(); resolve(val); };
     document.getElementById(`${id}-yes`).addEventListener('click', () => cleanup(true));
     document.getElementById(`${id}-no`).addEventListener('click',  () => cleanup(false));
-    // Automatisch nach 8 s wiederherstellen
-    setTimeout(() => { if (document.getElementById(id)) cleanup(true); }, 8000);
+    setTimeout(() => { if (document.getElementById(id)) cleanup(true); }, 8000); // auto-restore nach 8 s
   });
 
   if (!restore) { clearLayout(); return; }
@@ -154,14 +152,24 @@ async function restoreSession() {
   try {
     for (const entry of saved) {
       const def = { id: entry.id, label: entry.label, w: entry.w, h: entry.h, frame: entry.frame ?? undefined };
-      await addPanel(def, { rect: entry.rect, scale: entry.scale, url: entry.url || '' });
+      await addPanel(def, { rect: entry.rect, scale: entry.scale, url: entry.url || '', skipSave: true });
     }
   } finally {
     _isRestoring = false;
+    saveLayout(state.panels);
+  }
+
+  if (saved.length && scaleSlider) {
+    const firstScale = Math.max(0.1, Math.min(1, saved[0].scale ?? 1));
+    state.panelScale = firstScale;
+    const pct = Math.round(firstScale * 100);
+    const sliderVal = Math.max(Number(scaleSlider.min), Math.min(Number(scaleSlider.max), pct));
+    scaleSlider.value = sliderVal;
+    scaleSlider.style.setProperty('--pct', sliderVal);
+    if (scaleLabel) scaleLabel.textContent = pct + '%';
   }
 }
 
-/* Neues eigenes Gerät: aus dialogs.js via CustomEvent registrieren */
 window.addEventListener('ss:custom-device-added', e => {
   const def = e.detail;
   registerCustomDevice(def);
@@ -170,23 +178,18 @@ window.addEventListener('ss:custom-device-added', e => {
 });
 
 function wirePresentationHint() {
-  // Klick auf das Exit-Banner beendet den Präsentationsmodus
   document.getElementById('presentation-hint')
     ?.addEventListener('click', () => togglePresentation(false));
 
-  // Exit-Hinweis oben einblenden wenn Maus in obere 60px des Bildschirms fährt
-  let _hintTimer = null;
-  document.addEventListener('mousemove', e => {
-    if (!_presentationMode) return;
-    const nearTop = e.clientY < 60;
-    document.body.classList.toggle('show-exit-hint', nearTop);
-    clearTimeout(_hintTimer);
-    if (nearTop) {
-      _hintTimer = setTimeout(() => {
-        document.body.classList.remove('show-exit-hint');
-      }, 2500);
-    }
-  });
+  // mouseenter auf dem Trigger-Strip ist zuverlässiger als mousemove auf document,
+  // weil Webviews eigene Maus-Events schlucken
+  document.getElementById('hint-trigger')
+    ?.addEventListener('mouseenter', () => {
+      if (!_presentationMode) return;
+      document.body.classList.remove('hint-hidden');
+      clearTimeout(_hintHideTimer);
+      _hintHideTimer = setTimeout(() => document.body.classList.add('hint-hidden'), 3000);
+    });
 }
 
 /* ── Navigation ──────────────────────────────────────────────────────────── */
@@ -207,10 +210,15 @@ function wireNavigation() {
     updateClearBtn();
     desktopNavigateSmart(url);
     showWorkspace();
-    // Mit Sync: Panels folgen dem Desktop über did-navigate-in-page
-    // (SPA-Router feuert popstate → did-navigate-in-page → navigateAllPanels)
-    // Ohne Sync nur das aktive Panel direkt navigieren.
-    if (!syncEnabled && state.topId) {
+    // Panels direkt navigieren – nicht auf Desktop-did-navigate warten,
+    // da der Desktop-Webview beim ersten Start noch nicht initialisiert sein kann.
+    if (state.panels.size > 0) {
+      // Unterdrücke Panel→Desktop Feedback-Loop während Panels laden
+      _suppressPanelSync = true;
+      clearTimeout(_suppressTimer);
+      _suppressTimer = setTimeout(() => { _suppressPanelSync = false; }, 3000);
+      navigateAllPanels(url);
+    } else if (!syncEnabled && state.topId) {
       navigatePanel(state.topId, url);
     }
   });
@@ -231,7 +239,6 @@ function updateClearBtn() {
   clearBtn.hidden = urlInput.value.length === 0;
 }
 
-/* ── Sync ────────────────────────────────────────────────────────────────── */
 
 function wireSync() {
   if (!syncCb) return;
@@ -247,11 +254,8 @@ function wireSync() {
   arrangeBtn.addEventListener('click', autoArrange);
 }
 
-/* ── Panel-Skalierung ─────────────────────────────────────────────────────── */
-
 function wireScale() {
   if (!scaleSlider) return;
-  // Initiale CSS-Variable für die Slider-Füllung
   scaleSlider.style.setProperty('--pct', scaleSlider.value);
   scaleSlider.addEventListener('input', () => {
     scaleSlider.style.setProperty('--pct', scaleSlider.value);
@@ -264,18 +268,11 @@ function wireScale() {
   }
 }
 
-/**
- * Skaliert alle offenen Panels proportional.
- * Die rect-Koordinaten der Panels (logische Größe bei Scale=1) bleiben
- * unverändert. CSS-Transform + ZoomFactor der WebContentsViews passen sich an,
- * sodass die Seiten weiterhin ihre volle Gerät-Auflösung sehen.
- */
 function applyPanelScale(newScale) {
   state.panelScale = Math.max(0.1, Math.min(1, newScale));
   const pct = Math.round(state.panelScale * 100);
   if (scaleLabel) scaleLabel.textContent = pct + '%';
 
-  // Per-Panel-Scale aktualisieren + Titlebar-Anzeige sync
   for (const p of state.panels.values()) {
     p.scale = state.panelScale;
     const pscVal = p.decoEl.querySelector('.psc-val');
@@ -284,21 +281,124 @@ function applyPanelScale(newScale) {
   }
 }
 
-/* ── Chips ─────────────────────────────────────────────────────────────────── */
-
 function wireChips() {
   for (const chip of document.querySelectorAll('.chip[data-preset]')) {
     chip.addEventListener('click', () => openPreset(chip.dataset.preset));
   }
+
+  const viewsBtn = document.getElementById('views-btn');
+  const viewsDd  = document.getElementById('views-dropdown');
+  if (!viewsBtn || !viewsDd) return;
+
+  function positionDropdown() {
+    const br = viewsBtn.getBoundingClientRect();
+    viewsDd.style.top  = (br.bottom + 8) + 'px';
+    viewsDd.style.left = br.left + 'px';
+  }
+
+  viewsBtn.addEventListener('click', () => {
+    const nowOpen = viewsDd.hidden;
+    if (nowOpen) positionDropdown();
+    viewsDd.hidden = !nowOpen;
+    viewsBtn.setAttribute('aria-expanded', String(nowOpen));
+  });
+
+  document.addEventListener('click', e => {
+    if (!viewsDd.hidden &&
+        !viewsBtn.contains(e.target) &&
+        !viewsDd.contains(e.target)) {
+      viewsDd.hidden = true;
+      viewsBtn.setAttribute('aria-expanded', 'false');
+    }
+  }, true);
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !viewsDd.hidden) {
+      viewsDd.hidden = true;
+      viewsBtn.setAttribute('aria-expanded', 'false');
+      viewsBtn.focus();
+    }
+  });
 }
 
-/* ── IPC-Events ─────────────────────────────────────────────────────────── */
+function wireTemplates() {
+  const sel      = document.getElementById('template-select');
+  const loadBtn  = document.getElementById('template-load-btn');
+  const saveBtn  = document.getElementById('template-save-btn');
+  const delBtn   = document.getElementById('template-del-btn');
+  if (!sel) return;
 
+  function rebuildOptions() {
+    sel.length = 1;
+    for (const t of BUILTIN_TEMPLATES) {
+      const o = document.createElement('option');
+      o.value = t.id;
+      o.textContent = t.name;
+      o.dataset.builtin = '1';
+      sel.appendChild(o);
+    }
+    const sep = document.createElement('option');
+    sep.disabled = true;
+    sep.textContent = '───────────────';
+    sel.appendChild(sep);
+    for (const t of loadTemplates()) {
+      const o = document.createElement('option');
+      o.value = t.id;
+      o.textContent = t.name;
+      sel.appendChild(o);
+    }
+  }
+
+  rebuildOptions();
+
+  sel.addEventListener('change', () => {
+    const v = sel.value;
+    loadBtn.disabled = !v;
+    const opt = sel.options[sel.selectedIndex];
+    delBtn.disabled = !v || !!opt?.dataset.builtin; // nur eigene Templates löschbar
+  });
+
+  loadBtn.addEventListener('click', async () => {
+    const v = sel.value;
+    if (!v) return;
+    const all = [...BUILTIN_TEMPLATES, ...loadTemplates()];
+    const tpl = all.find(t => t.id === v);
+    if (!tpl) return;
+
+    for (const [id] of [...state.panels]) removePanel(id);
+    await new Promise(r => setTimeout(r, 80)); // kurz warten damit DOM aufgeräumt ist
+    for (const presetId of tpl.presets) openPreset(presetId);
+    toast(`Template »${tpl.name}« geladen.`);
+  });
+
+  saveBtn.addEventListener('click', () => {
+    if (state.panels.size === 0) { toast('Keine Ansichten geöffnet.'); return; }
+    const presets = [...state.panels.values()].map(p => p.def.id);
+    const defaultName = presets.map(id => id.charAt(0).toUpperCase() + id.slice(1)).join(' + ');
+    const name = window.prompt('Template-Name:', defaultName);
+    if (!name?.trim()) return;
+    const tpl = { id: `tpl_${Date.now()}`, name: name.trim(), presets };
+    saveTemplate(tpl);
+    rebuildOptions();
+    sel.value = tpl.id;
+    sel.dispatchEvent(new Event('change'));
+    toast(`Template »${tpl.name}« gespeichert.`);
+  });
+
+  delBtn.addEventListener('click', () => {
+    const v = sel.value;
+    if (!v) return;
+    const name = sel.options[sel.selectedIndex]?.textContent ?? v;
+    if (!window.confirm(`Template »${name}« löschen?`)) return;
+    deleteTemplate(v);
+    rebuildOptions();
+    sel.value = '';
+    sel.dispatchEvent(new Event('change'));
+    toast(`Template gelöscht.`);
+  });
+}
 function wireIpcEvents() {
-  let _navTimer = null;  // Debounce-Timer: Panel-Sync erst nach Ende der Redirect-Kette
-
-  // Panel-Navigation (Custom-Event aus panels.js) → URL-Bar aktualisieren
-  // und Desktop mitführen, damit andere Panels über did-navigate folgen können.
+  let _navTimer = null; // Debounce: Panel-Sync erst nach Ende der Redirect-Kette
   window.addEventListener('ss:navigated', ({ detail: { id, url } }) => {
     if (!url || url === 'about:blank') return;
     urlInput.value = url;
@@ -308,8 +408,6 @@ function wireIpcEvents() {
     }
   });
 
-  // Desktop: abgeschlossene Navigation (inkl. Server-Redirects)
-  // URL-Bar sofort aktualisieren; Panel-Sync erst nach 400 ms Ruhe (Redirect-Kette abwarten)
   desktopWv.addEventListener('did-navigate', e => {
     const url = e.url;
     if (!url || url === 'about:blank') return;
@@ -318,14 +416,17 @@ function wireIpcEvents() {
     updateClearBtn();
     clearTimeout(_navTimer);
     if (syncEnabled && !_isRestoring) {
-      _navTimer = setTimeout(() => navigateAllPanels(_desktopUrl), 400);
+      _navTimer = setTimeout(() => {
+        _suppressPanelSync = true;
+        clearTimeout(_suppressTimer);
+        _suppressTimer = setTimeout(() => { _suppressPanelSync = false; }, 3000);
+        navigateAllPanels(_desktopUrl);
+      }, 400);
     }
   });
 
-  // Desktop: Ladefehler (DNS, TLS, Timeout, …) → Toast mit verständlicher Meldung
   desktopWv.addEventListener('did-fail-load', e => {
-    // errorCode -3 = Abbruch durch Benutzer (back/forward/Reload) – kein Toast
-    // errorCode -301/-302 = Redirect – kein Toast
+    // errorCode -3 = Nutzerabbruch (back/forward/Reload), -0 = OK – kein Toast
     if (!e.isMainFrame) return;
     if (e.errorCode === -3 || e.errorCode === 0) return;
     const friendly = {
@@ -341,8 +442,6 @@ function wireIpcEvents() {
     toast(`⚠ ${msg}`, 'error', 6000);
   });
 
-  // Desktop: SPA-/History-Navigation (pushState / replaceState / Hash)
-  // Das ist die finale URL – sofort synchen und Debounce-Timer abbrechen
   desktopWv.addEventListener('did-navigate-in-page', e => {
     if (!e.isMainFrame) return;
     const url = e.url;
@@ -352,22 +451,36 @@ function wireIpcEvents() {
     _desktopUrl = url;
     urlInput.value = url;
     updateClearBtn();
-    if (syncEnabled) navigateAllPanels(url);
+    if (syncEnabled) {
+      _suppressPanelSync = true;
+      clearTimeout(_suppressTimer);
+      _suppressTimer = setTimeout(() => { _suppressPanelSync = false; }, 3000);
+      navigateAllPanels(url);
+    }
   });
 
-  // Popup / window.open → alle Ansichten auf neue URL navigieren
   desktopWv.addEventListener('new-window', e => {
     const url = e.url;
     if (!url || url === 'about:blank') return;
     urlInput.value = url; updateClearBtn();
-    desktopWv.loadURL(url); showWorkspace();
-    if (syncEnabled) navigateAllPanels(url);
+    desktopWv.loadURL(url).catch(() => {}); showWorkspace();
+    if (syncEnabled) {
+      _suppressPanelSync = true;
+      clearTimeout(_suppressTimer);
+      _suppressTimer = setTimeout(() => { _suppressPanelSync = false; }, 3000);
+      navigateAllPanels(url);
+    }
   });
   window.addEventListener('ss:popup', ({ detail: { url } }) => {
     if (!url || url === 'about:blank') return;
     urlInput.value = url; updateClearBtn();
-    desktopWv.loadURL(url); showWorkspace();
-    if (syncEnabled) navigateAllPanels(url);
+    desktopWv.loadURL(url).catch(() => {}); showWorkspace();
+    if (syncEnabled) {
+      _suppressPanelSync = true;
+      clearTimeout(_suppressTimer);
+      _suppressTimer = setTimeout(() => { _suppressPanelSync = false; }, 3000);
+      navigateAllPanels(url);
+    }
   });
 
   window.ss.onWindowResize(async () => {
@@ -389,23 +502,13 @@ function wireIpcEvents() {
   window.ss.onScreenshot  (()  => captureScreenshot());
   window.ss.onMaximize    (id  => toggleMaximize(id));
   window.ss.onFocusToggle (id  => toggleFocus(id));
+
+  // Wenn ein Webview Push-Subscribe mit "push service not available" scheitert,
+  // öffnet der Haupt-Prozess diesen Dialog automatisch.
+  window.ss.onPushConfigNeeded(() => openKeysDlg());
 }
 
-/* ── Interaktions-Sync (Klicks/Scroll im Desktop-WebView → alle Panels) ─────
- *
- * Klicks: Nach jedem Seitenlade-Event wird ein Listener per executeJavaScript
- * in den Desktop-Webview injiziert. Er baut einen stabilen CSS-Selector für
- * das geklickte Element und meldet ihn per console.log (Prefix __SS_CLICK__:)
- * an den Host-Renderer. Der Host ruft dann in jedem Panel-Webview
- * element.click() auf den selektierten Element auf – dadurch öffnen sich
- * Modals, Menüs und Dropdowns korrekt, weil echte JS-Click-Handler ausgelöst
- * werden (kein Koordinaten-Mapping das bei überlagernden Elementen versagt).
- *
- * Scroll-Events werden über sendInputEvent weitergeleitet (ohne Koordinaten-
- * Problem, da wir immer in die Mitte des Viewports scrollen).
- * ─────────────────────────────────────────────────────────────────────────── */
 
-/** Selector-Builder + Scroll-Injection im Desktop-Webview-Kontext. */
 const _CLICK_INJECT = `(function(){
   if(window.__ssCF)return;
   window.__ssCF=true;
@@ -444,7 +547,11 @@ const _CLICK_INJECT = `(function(){
   }
   _log('__SS_READY__');
   document.addEventListener('click',function(e){
-    try{_log('__SS_CLICK__:'+sel(interactive(e.target)));}catch(_){}
+    try{
+      var tgt=interactive(e.target);
+      _log('__SS_CLICK__:'+sel(tgt));
+      if(!_ITAGS.has(tgt.tagName.toLowerCase())&&!_IROLES.has((tgt.getAttribute('role')||''))&&tgt.getAttribute('onclick')==null)_log('__SS_BACKDROP__');
+    }catch(_){}
   },true);
   var _ssRaf=null;
   window.addEventListener('scroll',function(){
@@ -454,13 +561,20 @@ const _CLICK_INJECT = `(function(){
       _log('__SS_SCROLL__:'+Math.round(window.scrollX)+'|'+Math.round(window.scrollY));
     });
   },{passive:true,capture:true});
+  document.addEventListener('input',function(e){
+    try{
+      var t=e.target,tag=t.tagName;
+      if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'){
+        var isChk=(t.type==='checkbox'||t.type==='radio');
+        _log('__SS_INPUT__::'+JSON.stringify({s:sel(t),v:isChk?t.checked:t.value}));
+      }
+    }catch(_){}
+  },true);
 })();`;
 
 function wireDesktopInteraction() {
-  // Readiness des Desktop-Webviews tracken
   desktopWv.addEventListener('did-start-loading', () => { _desktopReady = false; });
 
-  // Klick-Listener nach jedem Seitenlade-Event neu injizieren (SPA ersetzt DOM)
   function injectClickForwarder() {
     _desktopReady = true;
     desktopWv.executeJavaScript(_CLICK_INJECT).catch(() => {});
@@ -468,7 +582,6 @@ function wireDesktopInteraction() {
   desktopWv.addEventListener('did-finish-load',    injectClickForwarder);
   desktopWv.addEventListener('did-navigate-in-page', injectClickForwarder);
 
-  // console-message vom Desktop-Webview empfangen und an Panels weiterleiten
   desktopWv.addEventListener('console-message', e => {
     const msg = e.message ?? '';
     if (msg.startsWith('__SS_')) console.log('[SS-sync]', msg.slice(0, 120));
@@ -479,17 +592,14 @@ function wireDesktopInteraction() {
     if (msg.startsWith('__SS_CLICK__:')) {
       const selector = msg.slice('__SS_CLICK__:'.length);
       if (!selector) return;
-      // Panel-Navigation die durch diesen Click ausgelöst wird, darf den Desktop
-      // nicht mitziehen (Feedback-Loop: Panel navigiert → ss:navigated → Desktop
-      // verlässt aktuelle Seite und offene Dropdowns/Modals schließen sich).
+      // _suppressPanelSync verhindert, dass die durch den Click ausgelöste Panel-Navigation
+      // den Desktop zurück navigiert und offene Dropdowns/Modals schließt.
       _suppressPanelSync = true;
       clearTimeout(_suppressTimer);
       _suppressTimer = setTimeout(() => { _suppressPanelSync = false; }, 2000);
       const js = `(function(){var el=document.querySelector(${JSON.stringify(selector)});if(el)el.click();})();`;
       for (const [, { decoEl }] of state.panels) {
         const wv = decoEl.querySelector('.panel-webview');
-        // Kein isWvReady-Guard – wie beim Scroll; executeJavaScript wirft sonst
-        // stumm wenn das Panel kurz lädt (Fehler wird ohnehin gecatcht).
         if (wv) wv.executeJavaScript(js).catch(() => {});
       }
 
@@ -500,17 +610,47 @@ function wireDesktopInteraction() {
       const js = `window.scrollTo(${sx},${sy});`;
       for (const [, { decoEl }] of state.panels) {
         const wv = decoEl.querySelector('.panel-webview');
-        // scrollTo ist eine sichere Operation – kein isWvReady-Guard nötig
+        if (wv) wv.executeJavaScript(js).catch(() => {});
+      }
+
+    } else if (msg.startsWith('__SS_INPUT__::')) {
+      let data;
+      try { data = JSON.parse(msg.slice('__SS_INPUT__::'.length)); } catch { return; }
+      const { s: selector, v: value } = data;
+      if (!selector) return;
+      let js;
+      if (typeof value === 'boolean') {
+        js = `(function(){var el=document.querySelector(${JSON.stringify(selector)});` +
+          `if(el){el.checked=${value};el.dispatchEvent(new Event('change',{bubbles:true}));}})();`;
+      } else {
+        const sv = JSON.stringify(String(value));
+        js = `(function(){` +
+          `var el=document.querySelector(${JSON.stringify(selector)});if(!el)return;` +
+          `try{var proto=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:` +
+          `el.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype;` +
+          `Object.getOwnPropertyDescriptor(proto,'value').set.call(el,${sv});}` +
+          `catch(_){el.value=${sv};}` +
+          `el.dispatchEvent(new Event('input',{bubbles:true}));` +
+          `el.dispatchEvent(new Event('change',{bubbles:true}));` +
+          `})();`;
+      }
+      for (const [, { decoEl }] of state.panels) {
+        const wv = decoEl.querySelector('.panel-webview');
+        if (wv) wv.executeJavaScript(js).catch(() => {});
+      }
+    } else if (msg === '__SS_BACKDROP__') {
+      const js = `(function(){if(document.activeElement)document.activeElement.blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));document.dispatchEvent(new KeyboardEvent('keyup',{key:'Escape',bubbles:true}));})();`;
+      for (const [, { decoEl }] of state.panels) {
+        const wv = decoEl.querySelector('.panel-webview');
         if (wv) wv.executeJavaScript(js).catch(() => {});
       }
     }
   });
 }
 
-/* ── Tastaturkürzel ──────────────────────────────────────────────────────── */
 
-/* ── Präsentationsmodus ──────────────────────────────────────────────────── */
 let _presentationMode = false;
+let _hintHideTimer    = null;
 
 function togglePresentation(force) {
   _presentationMode = (force !== undefined) ? !!force : !_presentationMode;
@@ -519,24 +659,35 @@ function togglePresentation(force) {
   const presentBtn = document.getElementById('present-btn');
   if (presentBtn) presentBtn.classList.toggle('active', _presentationMode);
   if (_presentationMode) {
-    // Fokus aus dem URL-Feld nehmen, damit Escape sauber greift
     document.activeElement?.blur();
-    toast('Präsentationsmodus – Esc oder F11 zum Beenden', 'info', 2800);
+    // Hinweis einblenden, nach 4 s automatisch ausblenden
+    document.body.classList.remove('hint-hidden');
+    clearTimeout(_hintHideTimer);
+    _hintHideTimer = setTimeout(() => document.body.classList.add('hint-hidden'), 4000);
+  } else {
+    document.body.classList.remove('hint-hidden');
+    clearTimeout(_hintHideTimer);
   }
 }
 
 function wireShortcuts() {
   document.getElementById('present-btn')?.addEventListener('click', () => togglePresentation());
 
-  // OS-Vollbild-änderung (auch via F11-globalShortcut in main.js) → UI synchronisieren
-  // OHNE setFullScreen erneut aufzurufen (würde Endlosschleife erzeugen)
   window.ss.onFullScreenChange(flag => {
-    if (flag === _presentationMode) return;  // bereits korrekt
+    if (flag === _presentationMode) return;
     _presentationMode = flag;
     document.body.classList.toggle('presentation', flag);
     const presentBtn = document.getElementById('present-btn');
     if (presentBtn) presentBtn.classList.toggle('active', flag);
-    if (flag) document.activeElement?.blur();
+    if (flag) {
+      document.activeElement?.blur();
+      document.body.classList.remove('hint-hidden');
+      clearTimeout(_hintHideTimer);
+      _hintHideTimer = setTimeout(() => document.body.classList.add('hint-hidden'), 4000);
+    } else {
+      document.body.classList.remove('hint-hidden');
+      clearTimeout(_hintHideTimer);
+    }
   });
 
   document.addEventListener('keydown', e => {
@@ -577,5 +728,71 @@ function adjustDesktopZoom(delta, reset = false) {
 document.getElementById('zoom-badge')?.addEventListener('click', () => adjustDesktopZoom(0, true));
 document.getElementById('zoom-out')  ?.addEventListener('click', () => adjustDesktopZoom(-0.1));
 document.getElementById('zoom-in')   ?.addEventListener('click', () => adjustDesktopZoom(+0.1));
+
+/* ── Auto-Updater ─────────────────────────────────────────────────────────── */
+function wireUpdater() {
+  window.ss.onUpdateAvailable?.(version => {
+    toast(`⬇ Update ${version} wird heruntergeladen …`, 'info', 5000);
+  });
+  window.ss.onUpdateDownloaded?.(version => {
+    const banner = document.createElement('div');
+    banner.style.cssText = [
+      'position:fixed', 'bottom:16px', 'left:50%', 'transform:translateX(-50%)',
+      'z-index:99999', 'background:#1e2030', 'color:#e0e4ff',
+      'border:1px solid rgba(255,255,255,.15)', 'border-radius:10px',
+      'padding:10px 16px', 'display:flex', 'align-items:center', 'gap:12px',
+      'font-size:13px', 'font-weight:500', 'box-shadow:0 8px 32px rgba(0,0,0,.5)',
+      'white-space:nowrap',
+    ].join(';');
+    banner.innerHTML = `
+      <span>🚀 Update <b>${version}</b> bereit – App neu starten?</span>
+      <button id="upd-yes" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:4px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">Jetzt neu starten</button>
+      <button id="upd-no"  style="background:rgba(255,255,255,.1);color:#e0e4ff;border:none;border-radius:6px;padding:4px 14px;font-size:12.5px;font-weight:600;cursor:pointer;">Später</button>
+    `;
+    document.body.appendChild(banner);
+    document.getElementById('upd-yes').addEventListener('click', () => window.ss.installUpdate());
+    document.getElementById('upd-no') .addEventListener('click', () => banner.remove());
+  });
+}
+
+wireUpdater();
+
+/* ── Dark Mode ────────────────────────────────────────────────────────────── */
+(function wireDarkMode() {
+  const btn = document.getElementById('darkmode-btn');
+  if (!btn) return;
+  const moon = document.getElementById('darkmode-icon-moon');
+  const sun  = document.getElementById('darkmode-icon-sun');
+  const apply = dark => {
+    document.body.classList.toggle('dark', dark);
+    localStorage.setItem('blickfang-dark', dark ? '1' : '0');
+    if (moon) moon.style.display = dark ? 'none' : '';
+    if (sun)  sun.style.display  = dark ? '' : 'none';
+  };
+  // Gespeicherte Präferenz laden, sonst Systemeinstellung
+  const stored = localStorage.getItem('blickfang-dark');
+  apply(stored !== null ? stored === '1' : window.matchMedia('(prefers-color-scheme: dark)').matches);
+  btn.addEventListener('click', () => apply(!document.body.classList.contains('dark')));
+})();
+
+/* ── About-Dialog ──────────────────────────────────────────────────── */
+(function wireAbout() {
+  const dlg   = document.getElementById('about-dialog');
+  const btn   = document.getElementById('about-btn');
+  const close = document.getElementById('about-close');
+  if (!dlg || !btn) return;
+
+  btn.addEventListener('click', () => dlg.showModal());
+  close.addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+
+  dlg.addEventListener('click', e => {
+    const link = e.target.closest('.about-link');
+    if (!link) return;
+    e.preventDefault();
+    const url = link.dataset.href;
+    if (url) window.ss.openExternal(url);
+  });
+})();
 
 init();

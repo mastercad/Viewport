@@ -1,18 +1,16 @@
-import { state }           from './state.js';
-import { FRAME_HEAD_H }    from './constants.js';
-import { sleep, toast }    from './utils.js';
+import { state }               from './state.js';
+import { sleep, toast }        from './utils.js';
+import { screenshotAllPanels } from './panels.js';
+export { panelCompositeLayout } from './screenshot-utils.js';
 
 const ssBtn     = document.getElementById('screenshot-btn');
 const ssMode    = document.getElementById('ss-mode');
-const ssOverlay = document.getElementById('ss-overlay');
 const workspace = document.getElementById('workspace');
 const desktopWv = document.getElementById('desktop-wv');
 
 export function wireScreenshot() {
   ssBtn.addEventListener('click', captureScreenshot);
 }
-
-/* ── Canvas-Hilfsfunktionen ──────────────────────────────────────────────── */
 
 function roundRect(ctx, x, y, w, h, r) {
   r = Math.min(r, w / 2, h / 2);
@@ -29,183 +27,130 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-async function imgElFromNative(nativeImg) {
-  const el = new Image();
-  await new Promise(res => { el.onload = res; el.src = nativeImg.toDataURL(); });
-  return el;
+async function captureDesktopPanel() {
+  if (typeof desktopWv.getWebContentsId !== 'function') return null;
+  // Main-Prozess übernimmt alles: kennt Fenstergröße, forciert Viewport per
+  // enableDeviceEmulation auf Workspace+Toolbar-Höhe, capturePage, stellt zurück.
+  // Kein CSS-Hack, kein Renderer-seitiges Polling erforderlich.
+  const res = await window.ss.captureDesktopWv(desktopWv.getWebContentsId());
+  if (!res?.png) return null;
+  return {
+    id: 'desktop', label: 'Desktop',
+    w: res.w, h: res.h, visW: res.w, visH: res.h,
+    wsH: res.wsH,
+    png: res.png,
+  };
 }
-
-/**
- * Zeichnet Geräterahmen + Webview-Inhalt auf den Canvas.
- * x/y sind Workspace-relative Pixel-Koordinaten.
- */
-function drawDeviceFrame(ctx, def, scale, x, y, visW, visH, imgEl) {
-  const d         = def.id;
-  const isPhone   = d === 'iphone' || d === 'android';
-  const isTablet  = d === 'tablet';
-  const darkFrame = isPhone || isTablet;
-  const br        = isPhone ? 46 * scale : isTablet ? 24 * scale : 8;
-
-  // Rahmen-Hintergrund mit Schatten
-  ctx.save();
-  ctx.shadowColor   = 'rgba(0,0,0,0.28)';
-  ctx.shadowBlur    = 24 * scale;
-  ctx.shadowOffsetY = 5 * scale;
-  roundRect(ctx, x, y, visW, visH, br);
-  ctx.fillStyle = darkFrame ? '#1c1c1e' : '#e8e8ed';
-  ctx.fill();
-  ctx.restore();
-
-  // Webview-Inhalt in Viewport-Bereich einzeichnen
-  const FH = FRAME_HEAD_H * scale;
-  const ft = (def.frame?.t ?? 0) * scale;
-  const fb = (def.frame?.b ?? 0) * scale;
-  const fl = (def.frame?.l ?? 0) * scale;
-  const fr = (def.frame?.r ?? 0) * scale;
-  const vpX = x + fl,       vpY = y + FH + ft;
-  const vpW = visW - fl - fr, vpH = visH - FH - ft - fb;
-
-  if (imgEl && vpW > 0 && vpH > 0) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(vpX, vpY, vpW, vpH);
-    ctx.clip();
-    ctx.drawImage(imgEl, vpX, vpY, vpW, vpH);
-    ctx.restore();
-  }
-
-  // Dynamic Island (iPhone)
-  if (d === 'iphone') {
-    const iW = 96 * scale, iH = 30 * scale;
-    ctx.fillStyle = '#000';
-    roundRect(ctx, x + visW / 2 - iW / 2, y + FH + 4 * scale, iW, iH, 20 * scale);
-    ctx.fill();
-  }
-  // Kamera-Punkt (Android, Tablet)
-  if (d === 'android' || d === 'tablet') {
-    ctx.fillStyle = '#3a3a3c';
-    ctx.beginPath();
-    ctx.arc(x + visW / 2, y + FH + (ft / 2), 4 * scale, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Home-Indicator
-  if (isPhone || isTablet) {
-    const hW = (isTablet ? 70 : 100) * scale, hH = 4 * scale;
-    ctx.fillStyle = '#636366';
-    roundRect(ctx, x + visW / 2 - hW / 2, y + visH - fb / 2 - hH / 2, hW, hH, hH / 2);
-    ctx.fill();
-  }
-}
-
-/* ── Screenshot-Capture ──────────────────────────────────────────────────── */
 
 export async function captureScreenshot() {
-  // 1. HUDs ausblenden, Interaktion sperren, kurz warten
-  document.body.classList.add('screenshot-mode');
   workspace.style.pointerEvents = 'none';
-  await sleep(220);   // HUD-Transition abwarten
-
+  document.body.classList.add('screenshot-mode');
+  await sleep(200); // desktop-wv braucht Zeit um auf bottom:0 zu reflowieren
   try {
-    // 2. Alle Webviews einzeln erfassen (zuverlässig für separate WebContents)
-    let desktopNative = null;
-    try { desktopNative = await desktopWv.capturePage(); } catch { /* ignore */ }
-
-    const wsBr = workspace.getBoundingClientRect();
-    const panelCaptures = [];
-    for (const [, p] of state.panels) {
-      const wv = p.decoEl.querySelector('.panel-webview');
-      if (!wv) continue;
-      try {
-        const nativeImg = await wv.capturePage();
-        const br        = p.decoEl.getBoundingClientRect();
-        panelCaptures.push({
-          p,
-          nativeImg,
-          relX: br.left - wsBr.left,   // Position relativ zum Workspace
-          relY: br.top  - wsBr.top,
-          visW: br.width,
-          visH: br.height,
-        });
-      } catch { /* ignore */ }
-    }
-
-    // 3. Overlay erst NACH dem Capture zeigen (sonst wird es mitgeknipst)
-    ssOverlay?.classList.remove('hidden');
-
     const mode = ssMode?.value ?? 'single';
 
-    if (mode === 'combined' || mode === 'workspace') {
-      await renderWorkspaceCanvas(desktopNative, panelCaptures);
-    } else {
-      // Einzeln: Desktop als Vollbild
-      if (desktopNative) {
-        const cv = document.createElement('canvas');
-        const sz = desktopNative.getSize();
-        cv.width = sz.width; cv.height = sz.height;
-        cv.getContext('2d').drawImage(await imgElFromNative(desktopNative), 0, 0);
-        await blobDownload(cv, `Desktop_${sz.width}x${sz.height}.png`);
-        await sleep(100);
-      }
-      // Einzeln: jedes Panel mit Geräterahmen
-      for (const { p, nativeImg, visW, visH } of panelCaptures) {
-        const cv    = document.createElement('canvas');
-        cv.width    = Math.round(visW);
-        cv.height   = Math.round(visH);
-        const ctx   = cv.getContext('2d');
-        const imgEl = await imgElFromNative(nativeImg);
-        drawDeviceFrame(ctx, p.def, p.scale ?? state.panelScale, 0, 0, visW, visH, imgEl);
-        await blobDownload(cv, `${p.def.label}_${Math.round(visW)}x${Math.round(visH)}.png`);
-        await sleep(100);
-      }
+    if (mode === 'combined') {
+      // WYSIWYG: gesamter Workspace-Bereich als ein Bildschirmfoto
+      await captureWorkspaceSnapshot();
+      toast('Screenshot gespeichert', 'success');
+      return;
     }
 
+    // Desktop ZUERST – vor Panels, kein Overlay einblenden (WYSIWYG)
+    const desktopResult = await captureDesktopPanel();
+    const panelResults  = state.panels.size > 0 ? (await screenshotAllPanels()) : [];
+
+    const results = [
+      ...(desktopResult ? [desktopResult] : []),
+      ...panelResults,
+    ];
+
+    if (!results.length) { toast('Screenshot fehlgeschlagen', 'error'); return; }
+
+    if (mode === 'workspace' && results.length > 1) {
+      await downloadWorkspaceComposite(results);
+    } else {
+      for (const r of results) {
+        // Desktop bekommt weiterhin einen Monitor-Rahmen (der CSS-Monitor-Overlay
+        // ist in screenshot-mode versteckt und landet nicht im captureDesktopWv).
+        // Panel-Screenshots sind WYSIWYG – kein weiteres Compositing nötig.
+        let png = r.png;
+        if (r.id === 'desktop') {
+          png = (await composeMonitorFrame(r)) ?? r.png;
+        }
+        downloadBase64(png, ssFilename(r.label, r.w, r.h));
+        await sleep(120);
+      }
+    }
     toast('Screenshot gespeichert', 'success');
   } catch (err) {
     console.error('Screenshot:', err);
     toast('Screenshot fehlgeschlagen', 'error');
   } finally {
     document.body.classList.remove('screenshot-mode');
-    ssOverlay?.classList.add('hidden');
     workspace.style.pointerEvents = '';
   }
 }
 
-/**
- * Workspace-Canvas: Desktop-WebView als Hintergrund, Panels mit Geräterahmen
- * an ihrer tatsächlichen Position — genau so wie in der App sichtbar.
- */
-async function renderWorkspaceCanvas(desktopNative, panelCaptures) {
-  const W = state.wsRect.w, H = state.wsRect.h;
-  const cv  = document.createElement('canvas');
-  cv.width  = W; cv.height = H;
-  const ctx = cv.getContext('2d');
-
-  // Workspace-Hintergrund (Punkte-Muster)
-  ctx.fillStyle = '#eef0f6';
-  ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = 'rgba(148,152,185,0.32)';
-  for (let px = 11; px < W; px += 22)
-    for (let py = 11; py < H; py += 22) {
-      ctx.beginPath(); ctx.arc(px, py, 1, 0, Math.PI * 2); ctx.fill();
-    }
-
-  // Desktop-WebView als Hintergrund
-  if (desktopNative) {
-    const imgEl = await imgElFromNative(desktopNative);
-    ctx.drawImage(imgEl, 0, 0, W, H);
-  }
-
-  // Panels: größte zuerst (tiefster Z-Stack)
-  const sorted = [...panelCaptures].sort((a, b) => b.visW * b.visH - a.visW * a.visH);
-  for (const { p, nativeImg, relX, relY, visW, visH } of sorted) {
-    const imgEl = await imgElFromNative(nativeImg);
-    drawDeviceFrame(ctx, p.def, p.scale ?? state.panelScale, relX, relY, visW, visH, imgEl);
-  }
-
-  await blobDownload(cv, `screenshare_workspace_${Date.now()}.png`);
+/** Nimmt den sichtbaren Workspace-Bereich als eine einzige Aufnahme auf –
+ *  exakt wie er im Fenster aussieht, inkl. aller CSS-Geräterahmen und Positionen. */
+async function captureWorkspaceSnapshot() {
+  const br  = workspace.getBoundingClientRect();
+  const png = await window.ss.captureRect({ x: br.left, y: br.top, width: br.width, height: br.height });
+  if (!png) throw new Error('captureRect failed');
+  downloadBase64(png, ssFilename('screenshare_workspace'));
 }
 
-/* ── Download-Helfer ─────────────────────────────────────────────────────── */
+async function downloadWorkspaceComposite(results) {
+  const { wsRect } = state;
+  const PAD = 20;
+  const cv  = document.createElement('canvas');
+  cv.width  = wsRect.w + PAD * 2;
+  cv.height = wsRect.h + PAD * 2;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#e8eaf0';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+
+  // Desktop-Ansicht als Hintergrund
+  const desktopR = results.find(r => r.id === 'desktop');
+  const panelR   = results.filter(r => r.id !== 'desktop');
+
+  if (desktopR) {
+    const img = new Image();
+    await new Promise(res => { img.onload = res; img.src = 'data:image/png;base64,' + desktopR.png; });
+    const wsH  = desktopR.wsH ?? desktopR.visH;
+    const srcH = Math.round(img.naturalHeight * wsH / desktopR.visH);
+    ctx.drawImage(img, 0, 0, img.naturalWidth, srcH, PAD, PAD, wsRect.w, wsRect.h);
+  }
+
+  // Panels: WYSIWYG-PNGs an ihrer Workspace-Position einzeichnen.
+  // Größte zuerst → kleinere liegen optisch vorne.
+  const sorted = [...panelR].sort((a, b) => b.w * b.h - a.w * a.h);
+  for (const r of sorted) {
+    const img = new Image();
+    await new Promise(res => { img.onload = res; img.src = 'data:image/png;base64,' + r.png; });
+    ctx.drawImage(img, PAD + r.wsX, PAD + r.wsY, r.w, r.h);
+  }
+
+  await blobDownload(cv, ssFilename('screenshare_layout'));
+}
+
+/** Erzeugt einen einheitlichen Screenshot-Dateinamen mit Timestamp.
+ *  @param {string} label  – Bezeichner (z.B. "Desktop", "screenshare_layout")
+ *  @param {number} [w]    – Breite in px (optional)
+ *  @param {number} [h]    – Höhe in px (optional)
+ *  @returns {string} z.B. "Desktop_1920x1080_1742300000000.png" */
+function ssFilename(label, w, h) {
+  const size = (w && h) ? `_${w}x${h}` : '';
+  return `${label}${size}_${Date.now()}.png`;
+}
+
+function downloadBase64(b64, name) {
+  const a = document.createElement('a');
+  a.href = 'data:image/png;base64,' + b64;
+  a.download = name;
+  a.click();
+}
 
 function blobDownload(canvas, name) {
   return new Promise(res => {
@@ -219,3 +164,72 @@ function blobDownload(canvas, name) {
   });
 }
 
+function canvasToBase64(cv) {
+  return new Promise(res => {
+    cv.toBlob(blob => {
+      const reader = new FileReader();
+      reader.onload = () => res(reader.result.split(',')[1]);
+      reader.readAsDataURL(blob);
+    }, 'image/png');
+  });
+}
+
+/** Zeichnet einen Monitor-Rahmen um den Desktop-Screenshot. */
+async function composeMonitorFrame(r) {
+  // Bild zuerst laden – naturalWidth/Height entspricht den echten Pixeln des PNG
+  // (captureRect liefert native Pixel, visW/visH sind CSS-Pixel → DPR kann > 1 sein).
+  const img = new Image();
+  await new Promise(res => { img.onload = res; img.src = 'data:image/png;base64,' + r.png; });
+  const nW  = img.naturalWidth;
+  const nH  = img.naturalHeight;
+  const dpr = r.visW ? nW / r.visW : 1;   // device pixel ratio
+
+  const BT     = Math.round(18  * dpr);
+  const BLR    = Math.round(12  * dpr);
+  const BC     = Math.round(24  * dpr);
+  const NECK_W = Math.round(14  * dpr);
+  const NECK_H = Math.round(18  * dpr);
+  const BASE_W = Math.round(120 * dpr);
+  const BASE_H = Math.round(8   * dpr);
+  const CR     = Math.round(10  * dpr);
+  const CAM_R  = Math.round(3   * dpr);
+
+  const bodyW  = nW + BLR * 2;
+  const bodyH  = nH + BT + BC;
+  const totalW = bodyW;
+  const totalH = bodyH + NECK_H + BASE_H;
+
+  const cv  = document.createElement('canvas');
+  cv.width  = totalW;
+  cv.height = totalH;
+  const ctx = cv.getContext('2d');
+
+  // Monitor-Body
+  ctx.fillStyle = '#1e1e24';
+  roundRect(ctx, 0, 0, bodyW, bodyH, CR);
+  ctx.fill();
+
+  // Chin – einfaches Rect (Body-Radius deckt obere Ecken ab)
+  ctx.fillStyle = '#252530';
+  ctx.fillRect(0, nH + BT, bodyW, BC);
+
+  // Kamera-Punkt
+  ctx.fillStyle = '#3a3a3c';
+  ctx.beginPath();
+  ctx.arc(totalW / 2, BT / 2, CAM_R, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Website-Inhalt in nativer Auflösung einzeichnen
+  ctx.drawImage(img, BLR, BT, nW, nH);
+
+  // Standfuss: Hals
+  ctx.fillStyle = '#2a2a34';
+  ctx.fillRect((totalW - NECK_W) / 2, bodyH, NECK_W, NECK_H);
+
+  // Standfuss: Basis
+  ctx.fillStyle = '#222230';
+  roundRect(ctx, (totalW - BASE_W) / 2, bodyH + NECK_H, BASE_W, BASE_H, Math.round(4 * dpr));
+  ctx.fill();
+
+  return canvasToBase64(cv);
+}
