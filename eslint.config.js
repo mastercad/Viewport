@@ -63,7 +63,7 @@ export default [
 
   // ── Preload-Skripte: CommonJS (require + Browser-APIs via contextBridge) ──
   {
-    files: ['src/preload.js', 'src/panel-preload.js', 'src/push-webview-preload.js'],
+    files: ['src/preload.js', 'src/panel-preload.js', 'src/push-webview-preload.js', 'src/push-webview-preload-new.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType:  'commonjs',

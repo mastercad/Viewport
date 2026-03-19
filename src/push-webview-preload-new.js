@@ -18,7 +18,6 @@
  * Der Website-Server kennt nur Endpoint + Keys – mehr braucht er nicht.
  */
 
-/* eslint-disable no-var */
 'use strict';
 
 var { ipcRenderer, contextBridge } = require('electron');

@@ -264,7 +264,7 @@ ipcMain.handle('screenshot:capture-desktop-wv', async (_e, wvId) => {
     return { png: img.toPNG().toString('base64'), w: winW, h: captureH, wsH };
   } catch { return null; }
   finally {
-    try { wc.disableDeviceEmulation(); } catch {}
+    try { wc.disableDeviceEmulation(); } catch { /* ignore */ }
   }
 });
 

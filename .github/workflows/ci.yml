@@ -1,13 +1,11 @@
 name: CI
 
-# Läuft bei jedem Pull Request und bei Pushes in main.
+# Läuft nur bei Pull Requests.
+# Bei Pushes in main übernimmt der Release-Workflow (der QA bereits einschließt).
 # Branch-Protection: "CI / qa / Lint (ESLint)" und "CI / qa / Tests (Vitest)"
 # als required status checks eintragen.
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
 
 jobs:

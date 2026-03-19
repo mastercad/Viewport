@@ -157,6 +157,7 @@ function blobDownload(canvas, name) {
     canvas.toBlob(blob => {
       const url = URL.createObjectURL(blob);
       const a   = document.createElement('a');
+ a      =   
       a.href = url; a.download = name; a.click();
       URL.revokeObjectURL(url);
       res();
