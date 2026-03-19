@@ -6,6 +6,10 @@
 
 ---
 
+![Blickfang Hauptfenster](assets/blickfang_hauptfenster.png)
+
+---
+
 ## Inhaltsverzeichnis
 
 1. [Projektüberblick](#1-projektüberblick)
