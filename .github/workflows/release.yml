@@ -108,10 +108,12 @@ jobs:
           name: windows-dist
           path: dist/*.exe
 
-  # ── macOS DMG + ZIP ─────────────────────────────────────────────────────
+  # ── macOS Universal DMG (arm64 + x64, läuft auf Apple Silicon und Intel) ─
   build-macos:
     needs: version
-    runs-on: macos-latest
+    # macos-14 = Apple Silicon Runner; electron-builder lipo-t selbstständig
+    # x64- und arm64-Electron-Binaries zu einem Universal Binary zusammen.
+    runs-on: macos-14
 
     steps:
       # ── Checkout ──────────────────────────────────────────────────────
@@ -129,21 +131,22 @@ jobs:
       - name: Abhängigkeiten installieren
         run: npm ci
 
-      # ── macOS-Archive bauen ───────────────────────────────────────────
-      - name: macOS-Pakete bauen
+      # ── macOS Universal DMG bauen ─────────────────────────────────────
+      # CSC_IDENTITY_AUTO_DISCOVERY=false → kein Code-Signing benötigt.
+      # Das DMG enthält ein Universal Binary (arm64 + x64).
+      - name: macOS Universal DMG bauen
         run: npm run build:mac -- --publish never
         env:
           NODE_ENV: production
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ""
 
       # ── Artefakt für den Release-Job bereitstellen ─────────────────────
       - name: Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
           name: macos-dist
-          path: |
-            dist/*.dmg
-            dist/*-mac.zip
+          path: dist/*.dmg
 
   # ── Gemeinsamen GitHub Release erstellen ────────────────────────────────
   release:
@@ -184,7 +187,7 @@ jobs:
             |---|---|
             | Linux | `Blickfang-${{ needs.version.outputs.version }}.AppImage` |
             | Windows | `Blickfang Setup ${{ needs.version.outputs.version }}.exe` |
-            | macOS | `Blickfang-${{ needs.version.outputs.version }}.dmg`, `Blickfang-${{ needs.version.outputs.version }}-mac.zip` |
+            | macOS (Universal) | `Blickfang-${{ needs.version.outputs.version }}-universal.dmg` |
           files: dist/*
           draft: false
           prerelease: false
