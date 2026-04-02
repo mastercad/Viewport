@@ -10,7 +10,8 @@
     "lint": "eslint src/ tests/",
     "lint:fix": "eslint src/ tests/ --fix",
     "build:win": "electron-builder --win",
-    "build:linux": "electron-builder --linux"
+    "build:linux": "electron-builder --linux",
+    "build:mac": "electron-builder --mac dmg zip"
   },
   "type": "module",
   "build": {

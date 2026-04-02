@@ -108,9 +108,46 @@ jobs:
           name: windows-dist
           path: dist/*.exe
 
+  # ── macOS DMG + ZIP ─────────────────────────────────────────────────────
+  build-macos:
+    needs: version
+    runs-on: macos-latest
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Node.js ───────────────────────────────────────────────────────
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # ── Abhängigkeiten ────────────────────────────────────────────────
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      # ── macOS-Archive bauen ───────────────────────────────────────────
+      - name: macOS-Pakete bauen
+        run: npm run build:mac -- --publish never
+        env:
+          NODE_ENV: production
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # ── Artefakt für den Release-Job bereitstellen ─────────────────────
+      - name: Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dist
+          path: |
+            dist/*.dmg
+            dist/*-mac.zip
+
   # ── Gemeinsamen GitHub Release erstellen ────────────────────────────────
   release:
-    needs: [version, build-linux, build-windows]
+    needs: [version, build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
 
     steps:
@@ -124,6 +161,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: windows-dist
+          path: dist
+
+      - name: macOS-Artefakt herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dist
           path: dist
 
       - name: GitHub Release erstellen
@@ -141,6 +184,7 @@ jobs:
             |---|---|
             | Linux | `Blickfang-${{ needs.version.outputs.version }}.AppImage` |
             | Windows | `Blickfang Setup ${{ needs.version.outputs.version }}.exe` |
+            | macOS | `Blickfang-${{ needs.version.outputs.version }}.dmg`, `Blickfang-${{ needs.version.outputs.version }}-mac.zip` |
           files: dist/*
           draft: false
           prerelease: false
