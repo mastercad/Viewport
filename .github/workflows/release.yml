@@ -139,7 +139,6 @@ jobs:
         env:
           NODE_ENV: production
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          CSC_LINK: ""
 
       # ── Artefakt für den Release-Job bereitstellen ─────────────────────
       - name: Artefakt hochladen
