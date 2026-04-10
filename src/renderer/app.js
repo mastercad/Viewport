@@ -522,34 +522,133 @@ const _CLICK_INJECT = `(function(){
     }
     return el;
   }
+  // XPath-String-Literal escapen – kein Backslash, damit template-literal-sicher
+  function _xpStr(s){
+    var sq=String.fromCharCode(39),dq=String.fromCharCode(34);
+    if(s.indexOf(sq)<0)return sq+s+sq;
+    if(s.indexOf(dq)<0)return dq+s+dq;
+    var res='concat(';
+    var parts=s.split(sq);
+    for(var i=0;i<parts.length;i++){if(i>0)res+=','+dq+sq+dq+',';if(parts[i])res+=sq+parts[i]+sq;}
+    return res+')';
+  }
   function sel(el){
     if(!el||el===document.body)return'body';
-    if(el.id)return'#'+CSS.escape(el.id);
+    var _tag=el.tagName.toLowerCase();
+    var _isField=(_tag==='input'||_tag==='textarea'||_tag==='select');
+    // 1. name – entwicklergesetzt, stabil
+    var nm=el.getAttribute('name');
+    if(nm)return _tag+'[name='+JSON.stringify(nm)+']';
+    // 2. aria-label direkt am Element
     var al=el.getAttribute('aria-label');
-    if(al)return el.tagName.toLowerCase()+'[aria-label='+JSON.stringify(al)+']';
+    if(al)return _tag+'[aria-label='+JSON.stringify(al)+']';
+    // 3. aria-labelledby – Wert ist Referenz-ID, entwicklergesetzt
+    var alby=el.getAttribute('aria-labelledby');
+    if(alby)return _tag+'[aria-labelledby='+JSON.stringify(alby)+']';
+    // 4. data-testid / data-id
     var dt=el.getAttribute('data-testid')||el.getAttribute('data-id');
-    if(dt)return el.tagName.toLowerCase()+'[data-testid='+JSON.stringify(dt)+']';
+    if(dt)return _tag+'[data-testid='+JSON.stringify(dt)+']';
+    // 5. placeholder
+    var ph=el.getAttribute('placeholder');
+    if(ph)return _tag+'[placeholder='+JSON.stringify(ph)+']';
+    // 6. label[for=id] → Label-Text per XPath (React generiert id+for auto → #id instabil)
+    if(el.id){try{var _lbl=document.querySelector('label[for='+JSON.stringify(el.id)+']');if(_lbl){var _lblt=(_lbl.textContent||'').trim().replace(/\s+/g,' ');if(_lblt)return'//label[normalize-space(.)='+_xpStr(_lblt)+']/descendant::'+_tag;}}catch(_){}}
+    // 7. Umschließendes <label> → XPath über Label-Text (// = XPath-Signal für Auswertung)
+    var wl=el.closest('label');
+    if(wl){
+      var wltxt=(wl.textContent||'').trim().replace(/\s+/g,' ');
+      if(wltxt)return'//label[normalize-space(.)='+_xpStr(wltxt)+']/descendant::'+_tag;
+    }
+    // 8. Nicht-Feld mit beliebiger ID
+    if(!_isField&&el.id)return'#'+CSS.escape(el.id);
+    // 8b. <a href="..."> → href ist layout-unabhängig und stabil
+    //     Vorzugsweise eindeutiger CSS-Selektor, sonst XPath
+    if(_tag==='a'){
+      var _href=el.getAttribute('href');
+      if(_href&&_href!=='#'&&_href!=='javascript:void(0)'&&_href!=='javascript:;'){
+        try{
+          var _hrefAll=document.querySelectorAll('a[href='+JSON.stringify(_href)+']');
+          if(_hrefAll.length===1)return'a[href='+JSON.stringify(_href)+']';
+          // mehrere Links mit gleichem href → XPath mit Position sicherer als Strukturpfad
+          if(_hrefAll.length>1){
+            var _hi=0;for(var _hj=0;_hj<_hrefAll.length;_hj++){if(_hrefAll[_hj]===el){_hi=_hj+1;break;}}
+            if(_hi>0)return'(//a[@href='+_xpStr(_href)+'])['+_hi+']';
+          }
+        }catch(_e){}
+      }
+    }
+    // 8c. <a>, <button> oder role=button/link → Text-Inhalt XPath (layout-unabhängig)
+    //     Funktioniert auch wenn responsive Design das Element in anderer Stelle hat.
+    //     Zählung per querySelectorAll+Textvergleich statt document.evaluate(count()),
+    //     damit der Branch auch in Umgebungen mit eingeschränktem XPath-Support greift.
+    if(_tag==='a'||_tag==='button'||el.getAttribute('role')==='button'||el.getAttribute('role')==='link'){
+      // textContent statt innerText: XPath normalize-space(.) wertet Textknoten aus (= textContent),
+      // NICHT das CSS-gerenderte innerText. Bei text-transform:uppercase würde innerText
+      // "EINSTELLUNGEN" liefern, aber normalize-space(.) findet nur "Einstellungen" → NULL.
+      var _txt=(el.textContent||el.getAttribute('aria-label')||'').trim().replace(/\s+/g,' ');
+      if(_txt){
+        try{
+          var _xp='//'+_tag+'[normalize-space(.)='+_xpStr(_txt)+']';
+          var _tall=document.querySelectorAll(_tag);
+          var _tmatch=0,_tidx=0;
+          for(var _ti=0;_ti<_tall.length;_ti++){
+            var _tnt=(_tall[_ti].textContent||'').trim().replace(/\s+/g,' ');
+            if(_tnt===_txt){_tmatch++;if(_tall[_ti]===el)_tidx=_tmatch;}
+          }
+          if(_tmatch===1)return _xp;
+          // Mehrfach gleicher Text → XPath-Positionierung unter gleichem Text (NICHT unter allen _tag!)
+          // (//button)[2] wäre falsch – das ist der 2. Button insgesamt, nicht der 2. mit diesem Text.
+          if(_tmatch>1&&_tidx>0)return'('+_xp+')['+_tidx+']';
+        }catch(_e){}
+      }
+    }
+    // 9. Position innerhalb <form> – :nth-of-type zählt NUR nach Tag, daher OHNE type-Filter
+    var tp=el.getAttribute('type');
+    var form=el.closest('form');
+    if(_isField&&form){
+      var allInForm=[].slice.call(form.querySelectorAll(_tag));
+      var fIdx=allInForm.indexOf(el);
+      if(fIdx>=0){
+        var fs=form.id?'form#'+CSS.escape(form.id):'form';
+        return fs+' '+_tag+':nth-of-type('+(fIdx+1)+')';
+      }
+    }
+    // 10. Kein form oder Suche fehlgeschlagen → XPath nth-occurrence dokument-weit
+    //     el.ownerDocument statt document: funktioniert auch in Frames
+    if(_isField){
+      var _doc=el.ownerDocument||document;
+      var _all=_doc.getElementsByTagName(_tag);
+      var _n=0,_found=false;
+      for(var _i=0;_i<_all.length;_i++){if(_all[_i]===el){_found=true;_n=_i+1;break;}}
+      if(_found)return'(//'+_tag+')['+_n+']';
+    }
+    // 11. ID als letzter Ausweg
+    if(el.id)return'#'+CSS.escape(el.id);
+    // 11. Struktureller Pfad – verankert an body, damit querySelector dokumentweit eindeutig bleibt
     var path=[];
     for(var cur=el,i=0;i<8&&cur&&cur!==document.body;cur=cur.parentElement,i++){
       var s=cur.tagName.toLowerCase();
-      if(cur.id){path.unshift('#'+CSS.escape(cur.id));break;}
-      var al2=cur.getAttribute('aria-label');
-      if(al2){path.unshift(s+'[aria-label='+JSON.stringify(al2)+']');break;}
-      var dt2=cur.getAttribute('data-testid')||cur.getAttribute('data-id');
-      if(dt2){path.unshift(s+'[data-testid='+JSON.stringify(dt2)+']');break;}
       var sibs=cur.parentElement?[...cur.parentElement.children]:[];
       var same=sibs.filter(function(x){return x.tagName===cur.tagName;});
       if(same.length>1)s+=':nth-of-type('+(same.indexOf(cur)+1)+')';
       path.unshift(s);
     }
-    return path.join('>');
+    return'body>'+path.join('>');
   }
   _log('__SS_READY__');
   document.addEventListener('click',function(e){
     try{
       var tgt=interactive(e.target);
-      _log('__SS_CLICK__:'+sel(tgt));
+      _log('__SS_CLICK__:'+encodeURIComponent(sel(tgt)));
       if(!_ITAGS.has(tgt.tagName.toLowerCase())&&!_IROLES.has((tgt.getAttribute('role')||''))&&tgt.getAttribute('onclick')==null)_log('__SS_BACKDROP__');
+    }catch(_){}
+  },true);
+  document.addEventListener('keydown',function(e){
+    try{
+      var k=e.key;
+      if(k==='Enter'||k==='Tab'||k==='Escape'){
+        _log('__SS_KEYDOWN__:'+JSON.stringify({k:k,s:sel(document.activeElement)}));
+      }
     }catch(_){}
   },true);
   var _ssRaf=null;
@@ -565,11 +664,109 @@ const _CLICK_INJECT = `(function(){
       var t=e.target,tag=t.tagName;
       if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'){
         var isChk=(t.type==='checkbox'||t.type==='radio');
-        _log('__SS_INPUT__::'+JSON.stringify({s:sel(t),v:isChk?t.checked:t.value}));
+        var _ltag=tag.toLowerCase();
+        // Stabiler Selektor: name > aria-label > placeholder > (//tag)[N] > label-text XPath
+        var _s='';
+        var _doc=t.ownerDocument||document;
+        // 1) name — nur eindeutig verwenden; Radio-Gruppen/doppelte Namen → (//tag)[N]
+        var _nm=t.getAttribute('name');
+        if(_nm){try{var _nmAll=_doc.querySelectorAll(_ltag+'[name='+JSON.stringify(_nm)+']');if(_nmAll.length===1||_nmAll[0]===t){_s=_ltag+'[name='+JSON.stringify(_nm)+']';}}catch(_e){}}
+        // 2) aria-label — nur wenn eindeutig auf dieser Seite
+        if(!_s){var _al=t.getAttribute('aria-label');if(_al){try{var _alAll=_doc.querySelectorAll(_ltag+'[aria-label='+JSON.stringify(_al)+']');if(_alAll.length===1||_alAll[0]===t){_s=_ltag+'[aria-label='+JSON.stringify(_al)+']';}}catch(_e){}}}
+        // 3) placeholder — nur wenn eindeutig auf dieser Seite
+        if(!_s){var _ph=t.getAttribute('placeholder');if(_ph){try{var _phAll=_doc.querySelectorAll(_ltag+'[placeholder='+JSON.stringify(_ph)+']');if(_phAll.length===1||_phAll[0]===t){_s=_ltag+'[placeholder='+JSON.stringify(_ph)+']';}}catch(_e){}}}
+        // 4) (//tag)[N]: Beide Webviews laden dieselbe URL → gleiche DOM-Struktur → N ist stabil.
+        if(!_s){
+          var _all=_doc.getElementsByTagName(_ltag);
+          for(var _i=0;_i<_all.length;_i++){
+            if(_all[_i]===t){_s='(//'+_ltag+')['+ (_i+1)+']';break;}
+          }
+        }
+        if(!_s&&t.id){try{var _lbl=(t.ownerDocument||document).querySelector('label[for='+JSON.stringify(t.id)+']');if(_lbl){var _lbltxt=(_lbl.textContent||'').trim().replace(/\s+/g,' ');if(_lbltxt)_s='//label[normalize-space(.)='+_xpStr(_lbltxt)+']/descendant::'+_ltag;}}catch(_e){}}
+        if(!_s){var _wl=t.closest('label');if(_wl){var _wltxt=(_wl.textContent||'').trim().replace(/\s+/g,' ');if(_wltxt)_s='//label[normalize-space(.)='+_xpStr(_wltxt)+']/descendant::'+_ltag;}}
+        if(!_s)_s=sel(t);
+        _log('__SS_INPUT__::'+JSON.stringify({s:_s,v:isChk?t.checked:t.value}));
       }
     }catch(_){}
   },true);
 })();`;
+
+/**
+ * Builds JS to set an input/checkbox value in a panel webview.
+ *
+ * Robustness for all frameworks (vanilla, React, Vue, react-hook-form, …):
+ *  1. el.focus()          – many framework forms only react to events on the
+ *                           focused element; also ensures React's FocusEvent
+ *                           bookkeeping is up to date.
+ *  2. native prototype setter – bypasses framework wrappers so el.value is
+ *                           actually updated at the DOM level.
+ *  3. _valueTracker reset  – React stores the last-seen value here.  If we
+ *                           don't reset it React compares el.value against the
+ *                           previously tracked value and may conclude "nothing
+ *                           changed" → silent drop of the input event.
+ *                           Setting it to '' forces the comparison to always
+ *                           see a diff and call onChange.
+ *  4. input + change events – covers both React synthetic (input) and native
+ *                           change listeners used by other libraries.
+ */
+// Liefert JS-Snippet zum Finden eines Elements per CSS-Selektor oder XPath (Präfix '//').
+function _findElJs(selector) {
+  const s = JSON.stringify(selector);
+  if (selector.startsWith('//') || selector.startsWith('(//')) {
+    // Fallback für text-basiertes XPath: wenn exaktes normalize-space-Match fehlt
+    // (z.B. weil textContent im Quell-Webview einzelne Zeichen als Leerzeichen liefert),
+    // wird ein contains()-Ausdruck für alle Wörter ≥4 Zeichen als Fallback versucht.
+    const m = selector.match(/\/\/(\w+)\[normalize-space\(\.\)='([^']*)'\]/);
+    if (m) {
+      const tag = m[1], text = m[2];
+      const words = text.split(/\s+/).filter(w => w.length >= 4);
+      if (words.length >= 2) {
+        const conds = words.map(w => `contains(normalize-space(.),'${w}')`).join(' and ');
+        const fbSel = selector.replace(
+          `//` + tag + `[normalize-space(.)='` + text + `']`,
+          `//` + tag + `[` + conds + `]`
+        );
+        const fb = JSON.stringify(fbSel);
+        return `(document.evaluate(${s},document,null,9,null).singleNodeValue`
+             + `||document.evaluate(${fb},document,null,9,null).singleNodeValue)`;
+      }
+    }
+    return `document.evaluate(${s},document,null,9,null).singleNodeValue`;
+  }
+  return `document.querySelector(${s})`;
+}
+
+function buildInputJs(selector, value) {
+  // inline: CSS oder XPath (Präfix '//' oder '(//')
+  const find = (selector.startsWith('//') || selector.startsWith('(//'))
+    ? `document.evaluate(${JSON.stringify(selector)},document,null,9,null).singleNodeValue`
+    : `document.querySelector(${JSON.stringify(selector)})`;
+  if (typeof value === 'boolean') {
+    return `(function(){` +
+      `var el=${find};` +
+      `if(!el)return;` +
+      `el.focus();` +
+      `el.checked=${value};` +
+      `var t=el._valueTracker;if(t)t.setValue(String(!${value}));` +
+      `el.dispatchEvent(new Event('change',{bubbles:true}));` +
+      `})();`;
+  }
+  const val = JSON.stringify(String(value));
+  return `(function(){` +
+    `var el=${find};` +
+    `if(!el)return;` +
+    `el.focus();` +
+    `try{` +
+      `var proto=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:` +
+               `el.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype;` +
+      `Object.getOwnPropertyDescriptor(proto,'value').set.call(el,${val});` +
+    `}catch(e){el.value=${val};}` +
+    `var t=el._valueTracker;` +
+    `try{if(t)t.setValue('');}catch(_){}` +
+    `el.dispatchEvent(new Event('input',{bubbles:true}));` +
+    `el.dispatchEvent(new Event('change',{bubbles:true}));` +
+    `})();`;
+}
 
 function wireDesktopInteraction() {
   desktopWv.addEventListener('did-start-loading', () => { _desktopReady = false; });
@@ -583,23 +780,37 @@ function wireDesktopInteraction() {
 
   desktopWv.addEventListener('console-message', e => {
     const msg = e.message ?? '';
-    if (msg.startsWith('__SS_')) return;
+    if (!msg.startsWith('__SS_')) return;
 
     if (!syncEnabled) return;
     if (state.panels.size === 0) return;
 
     if (msg.startsWith('__SS_CLICK__:')) {
-      const selector = msg.slice('__SS_CLICK__:'.length);
-      if (!selector) return;
+      const encoded = msg.slice('__SS_CLICK__:'.length);
+      if (!encoded) return;
+      const selector = decodeURIComponent(encoded);
+      console.log('[SS:CLICK] ENCODED:', encoded);
+      console.log('[SS:CLICK] DECODED:', selector);
       // _suppressPanelSync verhindert, dass die durch den Click ausgelöste Panel-Navigation
       // den Desktop zurück navigiert und offene Dropdowns/Modals schließt.
       _suppressPanelSync = true;
       clearTimeout(_suppressTimer);
       _suppressTimer = setTimeout(() => { _suppressPanelSync = false; }, 2000);
-      const js = `(function(){var el=document.querySelector(${JSON.stringify(selector)});if(el)el.click();})();`;
-      for (const [, { decoEl }] of state.panels) {
+      // Debug: Return-Value der IIFE → landet im .then() des Renderers, nicht in Panel-DevTools
+      const js = `(function(){
+        var el;
+        try{ el=${_findElJs(selector)}; }catch(e){ return 'FIND_ERROR:'+e; }
+        if(!el) return 'NULL url='+location.href+' title='+document.title.slice(0,30);
+        try{ el.click(); return 'CLICKED:'+el.tagName+(el.id?'#'+el.id:'')+'['+el.textContent.trim().slice(0,40)+']'; }
+        catch(e){ return 'CLICK_ERROR:'+e; }
+      })()`;
+      for (const [panelId, { decoEl }] of state.panels) {
         const wv = decoEl.querySelector('.panel-webview');
-        if (wv) wv.executeJavaScript(js).catch(() => {});
+        if (wv) {
+          wv.executeJavaScript(js)
+            .then(r  => console.log('[SS:CLICK] panel', panelId, '→', r))
+            .catch(e => console.log('[SS:CLICK] panel', panelId, '→ JS_ERROR:', e));
+        }
       }
 
     } else if (msg.startsWith('__SS_SCROLL__:')) {
@@ -617,28 +828,28 @@ function wireDesktopInteraction() {
       try { data = JSON.parse(msg.slice('__SS_INPUT__::'.length)); } catch { return; }
       const { s: selector, v: value } = data;
       if (!selector) return;
-      let js;
-      if (typeof value === 'boolean') {
-        js = `(function(){var el=document.querySelector(${JSON.stringify(selector)});` +
-          `if(el){el.checked=${value};el.dispatchEvent(new Event('change',{bubbles:true}));}})();`;
-      } else {
-        const sv = JSON.stringify(String(value));
-        js = `(function(){` +
-          `var el=document.querySelector(${JSON.stringify(selector)});if(!el)return;` +
-          `try{var proto=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:` +
-          `el.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype;` +
-          `Object.getOwnPropertyDescriptor(proto,'value').set.call(el,${sv});}` +
-          `catch(_){el.value=${sv};}` +
-          `el.dispatchEvent(new Event('input',{bubbles:true}));` +
-          `el.dispatchEvent(new Event('change',{bubbles:true}));` +
-          `})();`;
-      }
+      const js = buildInputJs(selector, value);
       for (const [, { decoEl }] of state.panels) {
         const wv = decoEl.querySelector('.panel-webview');
         if (wv) wv.executeJavaScript(js).catch(() => {});
       }
+    } else if (msg.startsWith('__SS_KEYDOWN__:')) {
+      let kdata;
+      try { kdata = JSON.parse(msg.slice('__SS_KEYDOWN__:'.length)); } catch { return; }
+      const { k: key, s: ksel } = kdata;
+      if (!key) return;
+      const kjs = `(function(){` +
+        `var el=${ksel ? _findElJs(ksel) : 'null'};` +
+        `if(!el)el=document.activeElement||document.body;` +
+        `el.dispatchEvent(new KeyboardEvent('keydown',{key:${JSON.stringify(key)},bubbles:true,cancelable:true}));` +
+        `el.dispatchEvent(new KeyboardEvent('keyup',{key:${JSON.stringify(key)},bubbles:true}));` +
+        `})();`;
+      for (const [, { decoEl }] of state.panels) {
+        const wv = decoEl.querySelector('.panel-webview');
+        if (wv) wv.executeJavaScript(kjs).catch(() => {});
+      }
     } else if (msg === '__SS_BACKDROP__') {
-      const js = `(function(){if(document.activeElement)document.activeElement.blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));document.dispatchEvent(new KeyboardEvent('keyup',{key:'Escape',bubbles:true}));})();`;
+      const js = `(function(){var bd=document.querySelector('.MuiBackdrop-root,.modal-backdrop');if(bd)bd.click();if(document.activeElement)document.activeElement.blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));document.dispatchEvent(new KeyboardEvent('keyup',{key:'Escape',bubbles:true}));})();`;
       for (const [, { decoEl }] of state.panels) {
         const wv = decoEl.querySelector('.panel-webview');
         if (wv) wv.executeJavaScript(js).catch(() => {});

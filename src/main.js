@@ -53,6 +53,10 @@ app.whenReady().then(() => {
     autoUpdater.autoDownload         = true;
     autoUpdater.autoInstallOnAppQuit = true;
 
+    // Internen Logger von electron-updater stumm schalten – verhindert den
+    // "Error: Cannot find latest-*.yml"-Block der vom Paket selbst protokolliert wird.
+    autoUpdater.logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, silly: () => {}, verbose: () => {} };
+
     autoUpdater.on('update-available', info => {
       mainWin?.webContents.send('updater:available', info.version);
     });
@@ -60,8 +64,11 @@ app.whenReady().then(() => {
       mainWin?.webContents.send('updater:downloaded', info.version);
     });
     autoUpdater.on('error', err => {
-      if (/no published versions/i.test(err.message)) return; // kein echter Fehler
-      console.log('[updater]', err.message);
+      const msg = String(err?.message ?? err);
+      if (/no published versions/i.test(msg)) return;
+      if (/Cannot find latest/i.test(msg)) return;
+      if (/404/i.test(msg)) return;
+      console.log('[updater]', msg);
     });
 
     autoUpdater.checkForUpdates().catch(() => {});
@@ -111,6 +118,7 @@ function createMainWindow() {
     console.error('[Blickfang] Renderer crashed:', details.reason, details.exitCode);
   });
   mainWin.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    if (code === -3) return; // ERR_ABORTED – harmlos bei Redirects
     console.error('[Blickfang] did-fail-load:', code, desc, url);
   });
 

@@ -72,7 +72,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-dist
-          path: dist/*.AppImage
+          path: |
+            dist/*.AppImage
+            dist/latest-linux.yml
 
   # ── Windows NSIS-Installer ──────────────────────────────────────────────
   build-windows:
@@ -106,7 +108,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-dist
-          path: dist/*.exe
+          path: |
+            dist/*.exe
+            dist/latest.yml
 
   # ── macOS Universal DMG (arm64 + x64, läuft auf Apple Silicon und Intel) ─
   build-macos:
@@ -145,7 +149,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-dist
-          path: dist/*.dmg
+          path: |
+            dist/*.dmg
+            dist/latest-mac.yml
 
   # ── Gemeinsamen GitHub Release erstellen ────────────────────────────────
   release:
