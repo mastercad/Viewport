@@ -552,11 +552,11 @@ const _CLICK_INJECT = `(function(){
     var ph=el.getAttribute('placeholder');
     if(ph)return _tag+'[placeholder='+JSON.stringify(ph)+']';
     // 6. label[for=id] → Label-Text per XPath (React generiert id+for auto → #id instabil)
-    if(el.id){try{var _lbl=document.querySelector('label[for='+JSON.stringify(el.id)+']');if(_lbl){var _lblt=(_lbl.textContent||'').trim().replace(/\s+/g,' ');if(_lblt)return'//label[normalize-space(.)='+_xpStr(_lblt)+']/descendant::'+_tag;}}catch(_){}}
+    if(el.id){try{var _lbl=document.querySelector('label[for='+JSON.stringify(el.id)+']');if(_lbl){var _lblt=(_lbl.textContent||'').trim().replace(/\\s+/g,' ');if(_lblt)return'//label[normalize-space(.)='+_xpStr(_lblt)+']/descendant::'+_tag;}}catch(_){}}
     // 7. Umschließendes <label> → XPath über Label-Text (// = XPath-Signal für Auswertung)
     var wl=el.closest('label');
     if(wl){
-      var wltxt=(wl.textContent||'').trim().replace(/\s+/g,' ');
+      var wltxt=(wl.textContent||'').trim().replace(/\\s+/g,' ');
       if(wltxt)return'//label[normalize-space(.)='+_xpStr(wltxt)+']/descendant::'+_tag;
     }
     // 8. Nicht-Feld mit beliebiger ID
@@ -585,14 +585,14 @@ const _CLICK_INJECT = `(function(){
       // textContent statt innerText: XPath normalize-space(.) wertet Textknoten aus (= textContent),
       // NICHT das CSS-gerenderte innerText. Bei text-transform:uppercase würde innerText
       // "EINSTELLUNGEN" liefern, aber normalize-space(.) findet nur "Einstellungen" → NULL.
-      var _txt=(el.textContent||el.getAttribute('aria-label')||'').trim().replace(/\s+/g,' ');
+      var _txt=(el.textContent||el.getAttribute('aria-label')||'').trim().replace(/\\s+/g,' ');
       if(_txt){
         try{
           var _xp='//'+_tag+'[normalize-space(.)='+_xpStr(_txt)+']';
           var _tall=document.querySelectorAll(_tag);
           var _tmatch=0,_tidx=0;
           for(var _ti=0;_ti<_tall.length;_ti++){
-            var _tnt=(_tall[_ti].textContent||'').trim().replace(/\s+/g,' ');
+            var _tnt=(_tall[_ti].textContent||'').trim().replace(/\\s+/g,' ');
             if(_tnt===_txt){_tmatch++;if(_tall[_ti]===el)_tidx=_tmatch;}
           }
           if(_tmatch===1)return _xp;
@@ -682,8 +682,8 @@ const _CLICK_INJECT = `(function(){
             if(_all[_i]===t){_s='(//'+_ltag+')['+ (_i+1)+']';break;}
           }
         }
-        if(!_s&&t.id){try{var _lbl=(t.ownerDocument||document).querySelector('label[for='+JSON.stringify(t.id)+']');if(_lbl){var _lbltxt=(_lbl.textContent||'').trim().replace(/\s+/g,' ');if(_lbltxt)_s='//label[normalize-space(.)='+_xpStr(_lbltxt)+']/descendant::'+_ltag;}}catch(_e){}}
-        if(!_s){var _wl=t.closest('label');if(_wl){var _wltxt=(_wl.textContent||'').trim().replace(/\s+/g,' ');if(_wltxt)_s='//label[normalize-space(.)='+_xpStr(_wltxt)+']/descendant::'+_ltag;}}
+        if(!_s&&t.id){try{var _lbl=(t.ownerDocument||document).querySelector('label[for='+JSON.stringify(t.id)+']');if(_lbl){var _lbltxt=(_lbl.textContent||'').trim().replace(/\\s+/g,' ');if(_lbltxt)_s='//label[normalize-space(.)='+_xpStr(_lbltxt)+']/descendant::'+_ltag;}}catch(_e){}}
+        if(!_s){var _wl=t.closest('label');if(_wl){var _wltxt=(_wl.textContent||'').trim().replace(/\\s+/g,' ');if(_wltxt)_s='//label[normalize-space(.)='+_xpStr(_wltxt)+']/descendant::'+_ltag;}}
         if(!_s)_s=sel(t);
         _log('__SS_INPUT__::'+JSON.stringify({s:_s,v:isChk?t.checked:t.value}));
       }
@@ -789,7 +789,9 @@ function wireDesktopInteraction() {
       const encoded = msg.slice('__SS_CLICK__:'.length);
       if (!encoded) return;
       const selector = decodeURIComponent(encoded);
+      // eslint-disable-next-line no-console
       console.log('[SS:CLICK] ENCODED:', encoded);
+      // eslint-disable-next-line no-console
       console.log('[SS:CLICK] DECODED:', selector);
       // _suppressPanelSync verhindert, dass die durch den Click ausgelöste Panel-Navigation
       // den Desktop zurück navigiert und offene Dropdowns/Modals schließt.
@@ -808,7 +810,9 @@ function wireDesktopInteraction() {
         const wv = decoEl.querySelector('.panel-webview');
         if (wv) {
           wv.executeJavaScript(js)
+            // eslint-disable-next-line no-console
             .then(r  => console.log('[SS:CLICK] panel', panelId, '→', r))
+            // eslint-disable-next-line no-console
             .catch(e => console.log('[SS:CLICK] panel', panelId, '→ JS_ERROR:', e));
         }
       }

@@ -36,7 +36,6 @@ const INJECT_CODE = match[1];
 // buildInputJs aus app.js als aufrufbare Funktion extrahieren
 const buildInputJsMatch = appSrc.match(/function buildInputJs\([\s\S]*?\n\}/);
 if (!buildInputJsMatch) throw new Error('buildInputJs nicht in app.js gefunden');
-// eslint-disable-next-line no-new-func
 const buildInputJs = new Function(`${buildInputJsMatch[0]}; return buildInputJs;`)();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -45,7 +44,6 @@ const buildInputJs = new Function(`${buildInputJsMatch[0]}; return buildInputJs;
 function injectIntoPage() {
   // window.__ssCF zurücksetzen, damit mehrere Tests unabhängig sind
   delete window.__ssCF;
-  // eslint-disable-next-line no-eval
   eval(INJECT_CODE);
 }
 
@@ -200,7 +198,6 @@ describe('sel() – CSS-Selektor-Generierung', () => {
     const xpSel = "//label[normalize-space(.)='Passwort']/descendant::input";
     // happy-dom hat kein document.evaluate – für diesen Test simulieren
     document.evaluate = (_expr, _ctx, _ns, _type, _res) => ({ singleNodeValue: inp });
-    // eslint-disable-next-line no-eval
     eval(buildInputJs(xpSel, 'geheim'));
     delete document.evaluate;
     expect(inp.value).toBe('geheim');
@@ -225,7 +222,6 @@ describe('sel() – CSS-Selektor-Generierung', () => {
     document.body.appendChild(sel);
     const xpSel = '(//select)[1]';
     document.evaluate = () => ({ singleNodeValue: sel });
-    // eslint-disable-next-line no-eval
     eval(buildInputJs(xpSel, 'b'));
     delete document.evaluate;
     expect(sel.value).toBe('b');
@@ -385,7 +381,6 @@ describe('Stabilitäts-Edge-Cases – Duplikate, Radio-Gruppen, Sonder-Felder', 
     const ta = document.createElement('textarea');
     document.body.appendChild(ta);
     document.evaluate = () => ({ singleNodeValue: ta });
-    // eslint-disable-next-line no-eval
     eval(buildInputJs('(//textarea)[1]', 'hallo'));
     delete document.evaluate;
     expect(ta.value).toBe('hallo');
@@ -396,7 +391,6 @@ describe('Stabilitäts-Edge-Cases – Duplikate, Radio-Gruppen, Sonder-Felder', 
     const opt = document.createElement('option'); opt.value = 'b'; opt.textContent = 'B'; sel.appendChild(opt);
     document.body.appendChild(sel);
     document.evaluate = () => ({ singleNodeValue: sel });
-    // eslint-disable-next-line no-eval
     eval(buildInputJs('(//select)[1]', 'b'));
     delete document.evaluate;
     expect(sel.value).toBe('b');
@@ -444,7 +438,7 @@ describe('__SS_CLICK__ – Klick-Nachrichten', () => {
 
   it('wird nur einmal injiziert (window.__ssCF-Guard)', () => {
     // Zweite Injektion – soll ignoriert werden, kein zweites __SS_READY__
-    eval(INJECT_CODE); // eslint-disable-line no-eval
+    eval(INJECT_CODE);
     const readyCalls = logSpy.mock.calls.filter(c => c[0] === '__SS_READY__');
     expect(readyCalls).toHaveLength(1);
   });
@@ -570,7 +564,6 @@ describe('buildInputJs – erzeugter Code setzt Werte korrekt', () => {
     inp.setAttribute('name', 'q');
     document.body.appendChild(inp);
     const js = buildInputJs('input[name="q"]', 'hello');
-    // eslint-disable-next-line no-eval
     eval(js);
     expect(inp.value).toBe('hello');
   });
@@ -580,7 +573,6 @@ describe('buildInputJs – erzeugter Code setzt Werte korrekt', () => {
     ta.setAttribute('name', 'msg');
     document.body.appendChild(ta);
     const js = buildInputJs('textarea[name="msg"]', 'welt');
-    // eslint-disable-next-line no-eval
     eval(js);
     expect(ta.value).toBe('welt');
   });
@@ -592,7 +584,6 @@ describe('buildInputJs – erzeugter Code setzt Werte korrekt', () => {
     const fired = [];
     inp.addEventListener('input', () => fired.push('input'));
     inp.addEventListener('change', () => fired.push('change'));
-    // eslint-disable-next-line no-eval
     eval(buildInputJs('input[name="x"]', 'abc'));
     expect(fired).toContain('input');
     expect(fired).toContain('change');
@@ -605,7 +596,6 @@ describe('buildInputJs – erzeugter Code setzt Werte korrekt', () => {
     document.body.appendChild(cb);
     const fired = [];
     cb.addEventListener('change', () => fired.push('change'));
-    // eslint-disable-next-line no-eval
     eval(buildInputJs('input[name="ok"]', true));
     expect(cb.checked).toBe(true);
     expect(fired).toContain('change');
@@ -617,7 +607,6 @@ describe('buildInputJs – erzeugter Code setzt Werte korrekt', () => {
     cb.setAttribute('name', 'ok');
     cb.checked = true;
     document.body.appendChild(cb);
-    // eslint-disable-next-line no-eval
     eval(buildInputJs('input[name="ok"]', false));
     expect(cb.checked).toBe(false);
   });
@@ -625,7 +614,6 @@ describe('buildInputJs – erzeugter Code setzt Werte korrekt', () => {
   it('tut nichts wenn der Selektor kein Element trifft', () => {
     // Soll keinen Fehler werfen
     expect(() => {
-      // eslint-disable-next-line no-eval
       eval(buildInputJs('#does-not-exist', 'x'));
     }).not.toThrow();
   });
@@ -635,7 +623,6 @@ describe('buildInputJs – erzeugter Code setzt Werte korrekt', () => {
     inp.setAttribute('name', 'q');
     document.body.appendChild(inp);
     const focusSpy = vi.spyOn(inp, 'focus');
-    // eslint-disable-next-line no-eval
     eval(buildInputJs('input[name="q"]', 'abc'));
     expect(focusSpy).toHaveBeenCalled();
   });
@@ -647,7 +634,6 @@ describe('buildInputJs – erzeugter Code setzt Werte korrekt', () => {
     // React-ähnlichen _valueTracker simulieren
     const tracker = { value: 'vorher', setValue(v) { this.value = v; }, getValue() { return this.value; } };
     inp._valueTracker = tracker;
-    // eslint-disable-next-line no-eval
     eval(buildInputJs('input[name="q"]', 'neu'));
     // Tracker muss auf '' gesetzt worden sein, damit React eine Änderung sieht
     expect(tracker.value).toBe('');
@@ -660,7 +646,6 @@ describe('buildInputJs – erzeugter Code setzt Werte korrekt', () => {
     document.body.appendChild(cb);
     const tracker = { value: 'false', setValue(v) { this.value = v; }, getValue() { return this.value; } };
     cb._valueTracker = tracker;
-    // eslint-disable-next-line no-eval
     eval(buildInputJs('input[name="ok"]', true));
     // React erwartet den Gegenwert als string ('false' für checked=true)
     expect(tracker.value).toBe('false');
@@ -705,7 +690,7 @@ describe('_xpStr – alle Quote-Kombinationen', () => {
       inp2.id = 'xid'; inp2.type = 'text';
       document.body.appendChild(inp2);
       delete window.__ssCF;
-      eval(INJECT_CODE); // eslint-disable-line no-eval
+      eval(INJECT_CODE);
       inp2.dispatchEvent(new Event('input', { bubbles: true }));
       const call = logSpy.mock.calls.find(c => c[0].startsWith('__SS_INPUT__::'));
       document.getElementsByTagName = origGBTN;
@@ -733,7 +718,7 @@ describe('_xpStr – alle Quote-Kombinationen', () => {
     expect(fn('Hallo')).toBe("'Hallo'");
     expect(fn("Bob's")).toBe('"Bob\'s"');
     expect(fn('say "hi"')).toBe("'say \"hi\"'");
-    expect(fn(`it's "complex"`)).toBe(`concat('it',\"'\",'s \"complex\"')`);
+    expect(fn(`it's "complex"`)).toBe(`concat('it',"'",'s "complex"')`);
   });
 });
 
@@ -1151,7 +1136,7 @@ describe('__SS_CLICK__ – interactive() Bubbling-Branches', () => {
     delete window.__ssCF; // Guard manuell zurücksetzen würde nochmal registrieren
     // Mit Guard bleibt es bei einem Listener → nur eine Nachricht pro Klick
     window.__ssCF = true; // Guard aktiv halten
-    eval(INJECT_CODE); // eslint-disable-line no-eval
+    eval(INJECT_CODE);
     logSpy.mockClear();
     const btn = document.createElement('button');
     btn.id = 'guard-btn';
@@ -1169,7 +1154,6 @@ describe('buildInputJs – Edge-Cases', () => {
     document.body.appendChild(inp);
     inp._valueTracker = { getValue() { return 'x'; } }; // kein setValue
     expect(() => {
-      // eslint-disable-next-line no-eval
       eval(buildInputJs('input[name="x"]', 'test'));
     }).not.toThrow();
   });
@@ -1186,7 +1170,6 @@ describe('buildInputJs – Edge-Cases', () => {
     });
     // Darf nicht werfen dank try/catch → Fallback el.value=val
     expect(() => {
-      // eslint-disable-next-line no-eval
       eval(buildInputJs('input[name="y"]', 'fallback'));
     }).not.toThrow();
   });
@@ -1194,7 +1177,6 @@ describe('buildInputJs – Edge-Cases', () => {
   it('XPath mit tatsächlichem document.evaluate und null-Ergebnis → kein Fehler', () => {
     document.evaluate = () => ({ singleNodeValue: null });
     expect(() => {
-      // eslint-disable-next-line no-eval
       eval(buildInputJs('//input[@id="gibts-nicht"]', 'x'));
     }).not.toThrow();
     delete document.evaluate;
@@ -1208,7 +1190,6 @@ describe('buildInputJs – Edge-Cases', () => {
     document.body.appendChild(cb);
     const tracker = { value: 'true', setValue(v) { this.value = v; } };
     cb._valueTracker = tracker;
-    // eslint-disable-next-line no-eval
     eval(buildInputJs('input[name="cb2"]', false));
     expect(cb.checked).toBe(false);
     // tracker.setValue(String(!false)) = 'true'
