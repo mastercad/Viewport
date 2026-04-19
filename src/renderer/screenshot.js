@@ -5,6 +5,7 @@ export { panelCompositeLayout } from './screenshot-utils.js';
 
 const ssBtn     = document.getElementById('screenshot-btn');
 const ssMode    = document.getElementById('ss-mode');
+const ssFrameCb = document.getElementById('ss-frame-cb');
 const workspace = document.getElementById('workspace');
 const desktopWv = document.getElementById('desktop-wv');
 
@@ -47,7 +48,8 @@ export async function captureScreenshot() {
   document.body.classList.add('screenshot-mode');
   await sleep(200); // desktop-wv braucht Zeit um auf bottom:0 zu reflowieren
   try {
-    const mode = ssMode?.value ?? 'single';
+    const mode      = ssMode?.value ?? 'single';
+    const withFrame = ssFrameCb?.checked ?? true;
 
     if (mode === 'combined') {
       // WYSIWYG: gesamter Workspace-Bereich als ein Bildschirmfoto
@@ -58,7 +60,7 @@ export async function captureScreenshot() {
 
     // Desktop ZUERST – vor Panels, kein Overlay einblenden (WYSIWYG)
     const desktopResult = await captureDesktopPanel();
-    const panelResults  = state.panels.size > 0 ? (await screenshotAllPanels()) : [];
+    const panelResults  = state.panels.size > 0 ? (await screenshotAllPanels({ withFrame })) : [];
 
     const results = [
       ...(desktopResult ? [desktopResult] : []),
@@ -75,10 +77,10 @@ export async function captureScreenshot() {
         // ist in screenshot-mode versteckt und landet nicht im captureDesktopWv).
         // Panel-Screenshots sind WYSIWYG – kein weiteres Compositing nötig.
         let png = r.png;
-        if (r.id === 'desktop') {
+        if (r.id === 'desktop' && withFrame) {
           png = (await composeMonitorFrame(r)) ?? r.png;
         }
-        downloadBase64(png, ssFilename(r.label, r.w, r.h));
+        await downloadBase64(png, ssFilename(r.label, r.w, r.h));
         await sleep(120);
       }
     }
@@ -145,21 +147,25 @@ function ssFilename(label, w, h) {
   return `${label}${size}_${Date.now()}.png`;
 }
 
-function downloadBase64(b64, name) {
-  const a = document.createElement('a');
-  a.href = 'data:image/png;base64,' + b64;
-  a.download = name;
-  a.click();
+async function downloadBase64(b64, name) {
+  // Zeigt einen nativen „Speichern unter"-Dialog über den Main-Prozess.
+  // Konsistentes Verhalten auf Linux, macOS und Windows.
+  await window.ss.saveScreenshot(b64, name);
 }
 
 function blobDownload(canvas, name) {
-  return new Promise(res => {
-    canvas.toBlob(blob => {
-      const url = URL.createObjectURL(blob);
-      const a   = document.createElement('a');
-      a.href = url; a.download = name; a.click();
-      URL.revokeObjectURL(url);
-      res();
+  return new Promise((res, rej) => {
+    canvas.toBlob(async blob => {
+      try {
+        const reader = new FileReader();
+        const b64 = await new Promise((r, e) => {
+          reader.onload  = () => r(reader.result.split(',')[1]);
+          reader.onerror = e;
+          reader.readAsDataURL(blob);
+        });
+        await window.ss.saveScreenshot(b64, name);
+        res();
+      } catch (err) { rej(err); }
     }, 'image/png');
   });
 }

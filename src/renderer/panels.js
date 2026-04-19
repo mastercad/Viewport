@@ -255,17 +255,26 @@ export function toggleMaximize(id) {
 export function autoArrange() {
   if (state.panels.size === 0) return;
   const PAD = 14;
-  const entries = [...state.panels.entries()].sort(([, a], [, b]) => b.rect.h - a.rect.h); // höchste zuerst
+  // Visuelle Höhe (skaliert) für Sortierung verwenden – höchste zuerst
+  const entries = [...state.panels.entries()].sort(([, a], [, b]) => {
+    const sa = a.scale ?? state.panelScale;
+    const sb = b.scale ?? state.panelScale;
+    return b.rect.h * sb - a.rect.h * sa;
+  });
   let x = PAD, y = PAD, rowH = 0;
   for (const [_id, p] of entries) {
-    if (x > PAD && x + p.rect.w > state.wsRect.w - PAD) {
+    const s  = p.scale ?? state.panelScale;
+    const vw = p.rect.w * s;
+    const vh = p.rect.h * s;
+    if (x > PAD && x + vw > state.wsRect.w - PAD) {
       x = PAD; y += rowH + PAD; rowH = 0;
     }
     p.rect = { x, y, w: p.rect.w, h: p.rect.h };
     applyDecoRect(p);
-    x += p.rect.w + PAD;
-    rowH = Math.max(rowH, p.rect.h);
+    x += vw + PAD;
+    rowH = Math.max(rowH, vh);
   }
+  saveLayout(state.panels);
   toast('Panels angeordnet', 'info');
 }
 
@@ -456,37 +465,51 @@ export function navigateAllPanels(url) {
   }
 }
 
-export async function screenshotPanel(id) {
+export async function screenshotPanel(id, { withFrame = true } = {}) {
   const p = state.panels.get(id);
   if (!p) return null;
-  // WYSIWYG: Den sichtbaren panel-deco-Bereich (CSS-Geräterahmen + Webview-Inhalt)
-  // direkt als Bildschirmausschnitt aufnehmen. So ist das Ergebnis pixelgenau
-  // identisch mit dem, was der Benutzer im Workspace sieht.
-  const br = p.decoEl.getBoundingClientRect();
-  const png = await window.ss.captureRect({
-    x:      Math.round(br.left),
-    y:      Math.round(br.top),
-    width:  Math.round(br.width),
-    height: Math.round(br.height),
-  });
-  if (!png) return null;
-  const s = p.scale ?? state.panelScale;
-  return {
-    id,
-    label:  p.def.label,
-    w:      Math.round(br.width),
-    h:      Math.round(br.height),
-    wsX:    p.rect.x,
-    wsY:    p.rect.y,
-    scale:  s,
-    png,
-  };
+
+  // Alle ANDEREN Panel-Decos ausblenden, damit überlappende Geräteansichten
+  // nicht in den captureRect-Bildausschnitt dieses Panels hineinstrahlen.
+  const siblings = [...document.querySelectorAll('.panel-deco')]
+    .filter(el => el.dataset.id !== String(id));
+  siblings.forEach(el => { el.style.visibility = 'hidden'; });
+
+  try {
+    // withFrame=true  → ganzes panel-deco (CSS-Geräterahmen + Inhalt, WYSIWYG)
+    // withFrame=false → nur panel-viewport (reiner Seiten-Inhalt, kein Rahmen)
+    const target = withFrame
+      ? p.decoEl
+      : (p.decoEl.querySelector('.panel-viewport') ?? p.decoEl);
+    const br = target.getBoundingClientRect();
+    const png = await window.ss.captureRect({
+      x:      Math.round(br.left),
+      y:      Math.round(br.top),
+      width:  Math.round(br.width),
+      height: Math.round(br.height),
+    });
+    if (!png) return null;
+    const s = p.scale ?? state.panelScale;
+    return {
+      id,
+      label:  p.def.label,
+      w:      Math.round(br.width),
+      h:      Math.round(br.height),
+      wsX:    p.rect.x,
+      wsY:    p.rect.y,
+      scale:  s,
+      png,
+    };
+  } finally {
+    // Sichtbarkeit aller Geschwister-Panels immer wiederherstellen.
+    siblings.forEach(el => { el.style.visibility = ''; });
+  }
 }
 
-export async function screenshotAllPanels() {
+export async function screenshotAllPanels({ withFrame = true } = {}) {
   const results = [];
   for (const [id] of state.panels) {
-    const r = await screenshotPanel(id);
+    const r = await screenshotPanel(id, { withFrame });
     if (r) results.push(r);
   }
   return results;

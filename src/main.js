@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, session, Menu, globalShortcut, webContents, net, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, session, Menu, globalShortcut, webContents, net, shell, dialog } from 'electron';
 import path    from 'path';
 import fs      from 'fs';
 import { fileURLToPath } from 'url';
@@ -289,6 +289,22 @@ ipcMain.on('updater:install', () => {
 ipcMain.handle('app:restart', () => {
   app.relaunch();
   app.exit(0);
+});
+
+// Zeigt einen nativen „Speichern unter"-Dialog und schreibt dann die Datei.
+// Funktioniert auf Linux, macOS und Windows gleich: pro Datei ein Dialog.
+ipcMain.handle('screenshot:save', async (_e, { b64, filename }) => {
+  const safe = path.basename(filename).replace(/[^\w\-. ]/g, '_');
+  const { canceled, filePath: dest } = await dialog.showSaveDialog(mainWin, {
+    title:       'Screenshot speichern',
+    defaultPath: path.join(app.getPath('downloads'), safe),
+    filters:     [{ name: 'PNG-Bilder', extensions: ['png'] }],
+  });
+  if (canceled || !dest) return { ok: false, canceled: true };
+  const buf = Buffer.from(b64, 'base64');
+  return fs.promises.writeFile(dest, buf)
+    .then(() => ({ ok: true, path: dest }))
+    .catch(err => ({ ok: false, error: err.message }));
 });
 
 // Öffnet externe Links im System-Browser – nur https: und mailto: erlaubt.

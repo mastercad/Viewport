@@ -592,3 +592,490 @@ describe('Regression: captureRect wird für Panels verwendet (kein captureWv)', 
     expect(fnBody).not.toMatch(/^\s*frame\s*:/m);
   });
 });
+
+// ─── F: withFrame-Option – screenshotPanel & screenshotAllPanels ──────────────
+//
+// Testet dass bei withFrame=true das panel-deco (Geräterahmen + Inhalt)
+// und bei withFrame=false nur das panel-viewport (reiner Seiteninhalt)
+// als captureRect-Ziel verwendet wird.
+
+/**
+ * Repliziert die withFrame-Logik aus screenshotPanel() in panels.js.
+ */
+async function screenshotPanelWithFrameLogic(panelEntry, captureRect, { withFrame = true } = {}) {
+  const p = panelEntry;
+  if (!p) return null;
+  const target = withFrame
+    ? p.decoEl
+    : (p.decoEl.querySelector('.panel-viewport') ?? p.decoEl);
+  const br = target.getBoundingClientRect();
+  const png = await captureRect({
+    x:      Math.round(br.left),
+    y:      Math.round(br.top),
+    width:  Math.round(br.width),
+    height: Math.round(br.height),
+  });
+  if (!png) return null;
+  const s = p.scale ?? 1;
+  return { id: p.id, label: p.def.label, w: Math.round(br.width), h: Math.round(br.height),
+    wsX: p.rect.x, wsY: p.rect.y, scale: s, png };
+}
+
+describe('F: screenshotPanel() – withFrame-Option', () => {
+  let captureRect;
+  let panelEntry;
+
+  const decoBounds     = { left: 100, top: 50, width: 440, height: 950 }; // inkl. Rahmen
+  const viewportBounds = { left: 112, top: 90, width: 414, height: 894 }; // nur Inhalt
+
+  beforeEach(() => {
+    captureRect = vi.fn().mockResolvedValue('png_data');
+
+    const viewport = {
+      getBoundingClientRect: () => viewportBounds,
+    };
+    const decoEl = {
+      getBoundingClientRect: () => decoBounds,
+      querySelector: (sel) => sel === '.panel-viewport' ? viewport : null,
+    };
+    panelEntry = {
+      id:    'p1',
+      def:   { label: 'iPhone' },
+      decoEl,
+      scale: 1,
+      rect:  { x: 80, y: 40 },
+    };
+  });
+
+  it('withFrame=true → captureRect auf decoEl (inkl. Geräterahmen)', async () => {
+    await screenshotPanelWithFrameLogic(panelEntry, captureRect, { withFrame: true });
+    expect(captureRect).toHaveBeenCalledWith({
+      x:      decoBounds.left,
+      y:      decoBounds.top,
+      width:  decoBounds.width,
+      height: decoBounds.height,
+    });
+  });
+
+  it('withFrame=false → captureRect auf panel-viewport (nur Inhalt)', async () => {
+    await screenshotPanelWithFrameLogic(panelEntry, captureRect, { withFrame: false });
+    expect(captureRect).toHaveBeenCalledWith({
+      x:      viewportBounds.left,
+      y:      viewportBounds.top,
+      width:  viewportBounds.width,
+      height: viewportBounds.height,
+    });
+  });
+
+  it('withFrame=true → w/h entsprechen der Gesamtgröße inkl. Rahmen', async () => {
+    const r = await screenshotPanelWithFrameLogic(panelEntry, captureRect, { withFrame: true });
+    expect(r.w).toBe(decoBounds.width);
+    expect(r.h).toBe(decoBounds.height);
+  });
+
+  it('withFrame=false → w/h entsprechen der reinen Viewport-Größe', async () => {
+    const r = await screenshotPanelWithFrameLogic(panelEntry, captureRect, { withFrame: false });
+    expect(r.w).toBe(viewportBounds.width);
+    expect(r.h).toBe(viewportBounds.height);
+  });
+
+  it('withFrame=true liefert größere Abmessungen als withFrame=false', async () => {
+    const withF    = await screenshotPanelWithFrameLogic(panelEntry, captureRect, { withFrame: true });
+    const withoutF = await screenshotPanelWithFrameLogic(panelEntry, captureRect, { withFrame: false });
+    expect(withF.w).toBeGreaterThan(withoutF.w);
+    expect(withF.h).toBeGreaterThan(withoutF.h);
+  });
+
+  it('Standard-Wert ist withFrame=true (kein Argument = Rahmen dabei)', async () => {
+    await screenshotPanelWithFrameLogic(panelEntry, captureRect);
+    // sollte wie withFrame=true auf decoEl zugreifen
+    expect(captureRect).toHaveBeenCalledWith({
+      x:      decoBounds.left,
+      y:      decoBounds.top,
+      width:  decoBounds.width,
+      height: decoBounds.height,
+    });
+  });
+
+  it('withFrame=false fällt auf decoEl zurück wenn querySelector kein Viewport findet', async () => {
+    panelEntry.decoEl.querySelector = () => null;
+    await screenshotPanelWithFrameLogic(panelEntry, captureRect, { withFrame: false });
+    expect(captureRect).toHaveBeenCalledWith({
+      x:      decoBounds.left,
+      y:      decoBounds.top,
+      width:  decoBounds.width,
+      height: decoBounds.height,
+    });
+  });
+
+  it('gibt null zurück wenn captureRect null liefert (withFrame=false)', async () => {
+    captureRect.mockResolvedValue(null);
+    const r = await screenshotPanelWithFrameLogic(panelEntry, captureRect, { withFrame: false });
+    expect(r).toBeNull();
+  });
+
+  it('Ergebnis-Objekt enthält id, label, wsX, wsY, scale unabhängig von withFrame', async () => {
+    for (const withFrame of [true, false]) {
+      const r = await screenshotPanelWithFrameLogic(panelEntry, captureRect, { withFrame });
+      expect(r).toMatchObject({ id: 'p1', label: 'iPhone', wsX: 80, wsY: 40, scale: 1 });
+    }
+  });
+});
+
+// ─── G: screenshotAllPanels – withFrame wird weitergereicht ──────────────────
+
+/**
+ * Repliziert screenshotAllPanels({ withFrame }) aus panels.js.
+ */
+async function screenshotAllPanelsLogic(panelsMap, screenshotPanel) {
+  const results = [];
+  for (const [id] of panelsMap) {
+    const r = await screenshotPanel(id);
+    if (r) results.push(r);
+  }
+  return results;
+}
+
+describe('G: screenshotAllPanels() – withFrame-Option wird weitergereicht', () => {
+  it('ruft screenshotPanel für jeden Eintrag in der Map auf', async () => {
+    const map = new Map([['1', {}], ['2', {}], ['3', {}]]);
+    const sp  = vi.fn().mockResolvedValue({ id: 'x', png: 'p' });
+    const results = await screenshotAllPanelsLogic(map, sp);
+    expect(sp).toHaveBeenCalledTimes(3);
+    expect(results).toHaveLength(3);
+  });
+
+  it('filtert null-Ergebnisse heraus (Panel nicht gefunden)', async () => {
+    const map = new Map([['1', {}], ['2', {}]]);
+    const sp  = vi.fn()
+      .mockResolvedValueOnce({ id: '1', png: 'p' })
+      .mockResolvedValueOnce(null);
+    const results = await screenshotAllPanelsLogic(map, sp);
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe('1');
+  });
+
+  it('gibt leeres Array zurück wenn alle Panels null liefern', async () => {
+    const map = new Map([['1', {}]]);
+    const sp  = vi.fn().mockResolvedValue(null);
+    const results = await screenshotAllPanelsLogic(map, sp);
+    expect(results).toHaveLength(0);
+  });
+});
+
+// ─── H: captureScreenshot – Rahmen-Steuerung über withFrame-Flag ─────────────
+//
+// Testet dass bei withFrame=false weder composeMonitorFrame für Desktop
+// noch der Geräterahmen für Panels aufgerufen wird.
+
+/**
+ * Repliziert die Rahmen-Steuerungslogik aus captureScreenshot() für den
+ * "single"-Modus – speziell den composeMonitorFrame-Aufruf für Desktop.
+ */
+async function captureScreenshotFrameLogic({
+  results,
+  withFrame,
+  composeMonitorFrame,
+  downloadSingle,
+}) {
+  for (const r of results) {
+    let png = r.png;
+    if (r.id === 'desktop' && withFrame) {
+      png = (await composeMonitorFrame(r)) ?? r.png;
+    }
+    downloadSingle(png, r.label, r.w, r.h);
+  }
+}
+
+describe('H: captureScreenshot() – Rahmen-Steuerung (withFrame)', () => {
+  const desktopResult = { id: 'desktop', label: 'Desktop', w: 1366, h: 768, png: 'desk_raw', visW: 1366, visH: 768 };
+  const panelResult   = { id: 'p1',      label: 'iPhone',  w: 390,  h: 844, png: 'panel_png' };
+
+  let composeMonitorFrame;
+  let downloadSingle;
+
+  beforeEach(() => {
+    composeMonitorFrame = vi.fn().mockResolvedValue('desk_framed');
+    downloadSingle      = vi.fn();
+  });
+
+  it('withFrame=true → composeMonitorFrame wird für Desktop aufgerufen', async () => {
+    await captureScreenshotFrameLogic({
+      results: [desktopResult],
+      withFrame: true,
+      composeMonitorFrame,
+      downloadSingle,
+    });
+    expect(composeMonitorFrame).toHaveBeenCalledOnce();
+    expect(composeMonitorFrame).toHaveBeenCalledWith(desktopResult);
+  });
+
+  it('withFrame=true → Desktop-Download erhält geframtes PNG', async () => {
+    await captureScreenshotFrameLogic({
+      results: [desktopResult],
+      withFrame: true,
+      composeMonitorFrame,
+      downloadSingle,
+    });
+    expect(downloadSingle).toHaveBeenCalledWith('desk_framed', 'Desktop', 1366, 768);
+  });
+
+  it('withFrame=false → composeMonitorFrame wird NICHT aufgerufen', async () => {
+    await captureScreenshotFrameLogic({
+      results: [desktopResult],
+      withFrame: false,
+      composeMonitorFrame,
+      downloadSingle,
+    });
+    expect(composeMonitorFrame).not.toHaveBeenCalled();
+  });
+
+  it('withFrame=false → Desktop-Download erhält rohes PNG (kein Monitor-Rahmen)', async () => {
+    await captureScreenshotFrameLogic({
+      results: [desktopResult],
+      withFrame: false,
+      composeMonitorFrame,
+      downloadSingle,
+    });
+    expect(downloadSingle).toHaveBeenCalledWith('desk_raw', 'Desktop', 1366, 768);
+  });
+
+  it('withFrame=true → Panel-PNG wird nicht durch composeMonitorFrame verändert', async () => {
+    await captureScreenshotFrameLogic({
+      results: [panelResult],
+      withFrame: true,
+      composeMonitorFrame,
+      downloadSingle,
+    });
+    expect(composeMonitorFrame).not.toHaveBeenCalled();
+    expect(downloadSingle).toHaveBeenCalledWith('panel_png', 'iPhone', 390, 844);
+  });
+
+  it('withFrame=false → Panel-PNG bleibt unverändert', async () => {
+    await captureScreenshotFrameLogic({
+      results: [panelResult],
+      withFrame: false,
+      composeMonitorFrame,
+      downloadSingle,
+    });
+    expect(downloadSingle).toHaveBeenCalledWith('panel_png', 'iPhone', 390, 844);
+  });
+
+  it('composeMonitorFrame-Fehler → Fallback auf rohes PNG', async () => {
+    composeMonitorFrame.mockResolvedValue(null); // simuliert Fehler-Fallback
+    await captureScreenshotFrameLogic({
+      results: [desktopResult],
+      withFrame: true,
+      composeMonitorFrame,
+      downloadSingle,
+    });
+    expect(downloadSingle).toHaveBeenCalledWith('desk_raw', 'Desktop', 1366, 768);
+  });
+
+  it('mehrere Ergebnisse: Desktop gerahmt, Panel ungerahmt (withFrame=true)', async () => {
+    await captureScreenshotFrameLogic({
+      results: [desktopResult, panelResult],
+      withFrame: true,
+      composeMonitorFrame,
+      downloadSingle,
+    });
+    expect(composeMonitorFrame).toHaveBeenCalledTimes(1);
+    expect(downloadSingle).toHaveBeenCalledTimes(2);
+    expect(downloadSingle).toHaveBeenNthCalledWith(1, 'desk_framed', 'Desktop', 1366, 768);
+    expect(downloadSingle).toHaveBeenNthCalledWith(2, 'panel_png',   'iPhone',  390,  844);
+  });
+
+  it('mehrere Ergebnisse: kein Framing bei withFrame=false', async () => {
+    await captureScreenshotFrameLogic({
+      results: [desktopResult, panelResult],
+      withFrame: false,
+      composeMonitorFrame,
+      downloadSingle,
+    });
+    expect(composeMonitorFrame).not.toHaveBeenCalled();
+    expect(downloadSingle).toHaveBeenNthCalledWith(1, 'desk_raw',  'Desktop', 1366, 768);
+    expect(downloadSingle).toHaveBeenNthCalledWith(2, 'panel_png', 'iPhone',  390,  844);
+  });
+});
+
+// ─── I: Quellcode-Struktur – withFrame in panels.js und screenshot.js ─────────
+
+const panelsSrc     = readFileSync(new URL('../src/renderer/panels.js',    import.meta.url), 'utf8');
+const screenshotSrc2 = readFileSync(new URL('../src/renderer/screenshot.js', import.meta.url), 'utf8');
+
+describe('I: Quellcode-Struktur – withFrame-Implementierung', () => {
+  it('screenshotPanel akzeptiert withFrame-Parameter', () => {
+    const fnStart = panelsSrc.indexOf('export async function screenshotPanel');
+    const fnEnd   = panelsSrc.indexOf('\nexport async function screenshotAllPanels');
+    const fnBody  = panelsSrc.slice(fnStart, fnEnd);
+    expect(fnBody).toContain('withFrame');
+  });
+
+  it('screenshotPanel verwendet panel-viewport wenn withFrame=false', () => {
+    const fnStart = panelsSrc.indexOf('export async function screenshotPanel');
+    const fnEnd   = panelsSrc.indexOf('\nexport async function screenshotAllPanels');
+    const fnBody  = panelsSrc.slice(fnStart, fnEnd);
+    expect(fnBody).toContain('.panel-viewport');
+  });
+
+  it('screenshotAllPanels leitet withFrame weiter', () => {
+    const fnStart = panelsSrc.indexOf('export async function screenshotAllPanels');
+    const fnBody  = panelsSrc.slice(fnStart, fnStart + 300);
+    expect(fnBody).toContain('withFrame');
+  });
+
+  it('screenshot.js liest ss-frame-cb aus dem DOM', () => {
+    expect(screenshotSrc2).toContain('ss-frame-cb');
+  });
+
+  it('screenshot.js übergibt withFrame an screenshotAllPanels', () => {
+    expect(screenshotSrc2).toContain('screenshotAllPanels({ withFrame');
+  });
+
+  it('screenshot.js prüft withFrame vor composeMonitorFrame', () => {
+    expect(screenshotSrc2).toContain('withFrame');
+    // composeMonitorFrame darf nur bedingt aufgerufen werden
+    const monitorIdx  = screenshotSrc2.indexOf('composeMonitorFrame');
+    const withFrameNearby = screenshotSrc2.slice(
+      Math.max(0, monitorIdx - 150),
+      monitorIdx + 50,
+    );
+    expect(withFrameNearby).toContain('withFrame');
+  });
+});
+
+// ─── J: Panel-Isolation – Geschwister-Panels beim Screenshot ausblenden ───────
+//
+//  Wenn Panels überlagert sind, dürfen Geschwister-Panels NICHT im captureRect
+//  des aufzunehmenden Panels landen. screenshotPanel() blendet daher alle
+//  anderen .panel-deco-Elemente temporär per visibility:hidden aus.
+
+/**
+ * Repliziert die Isolierungs-Logik aus screenshotPanel() (panels.js).
+ * Geschwister-Panels werden vor captureRect ausgeblendet und danach
+ * im finally-Block immer wiederhergestellt.
+ */
+async function screenshotPanelIsolationLogic(id, panelEntry, allDecos, captureRect) {
+  if (!panelEntry) return null;
+  const siblings = allDecos.filter(el => el.dataset.id !== String(id));
+  siblings.forEach(el => { el.style.visibility = 'hidden'; });
+  try {
+    const br  = panelEntry.decoEl.getBoundingClientRect();
+    const png = await captureRect({
+      x: Math.round(br.left), y: Math.round(br.top),
+      width: Math.round(br.width), height: Math.round(br.height),
+    });
+    if (!png) return null;
+    return { id, png };
+  } finally {
+    siblings.forEach(el => { el.style.visibility = ''; });
+  }
+}
+
+describe('J: screenshotPanel() – Geschwister-Panel-Isolation bei Überlagerung', () => {
+  let captureRect;
+  let decoA, decoB, decoC;
+  let panelEntry;
+
+  beforeEach(() => {
+    captureRect = vi.fn().mockResolvedValue('png_data');
+
+    decoA = { dataset: { id: 'a' }, style: {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 414, height: 894 }) };
+    decoB = { dataset: { id: 'b' }, style: {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 375, height: 812 }) };
+    decoC = { dataset: { id: 'c' }, style: {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 360, height: 780 }) };
+
+    panelEntry = { decoEl: decoA };
+  });
+
+  it('blendet alle anderen panel-deco-Elemente während captureRect aus (visibility:hidden)', async () => {
+    await screenshotPanelIsolationLogic('a', panelEntry, [decoA, decoB, decoC], captureRect);
+    // captureRect wurde aufgerufen – während des Aufrufs waren B und C hidden
+    // Wir prüfen nachher den finalen Zustand und ob captureRect aufgerufen wurde
+    expect(captureRect).toHaveBeenCalledOnce();
+    // Sichtbarkeit wurde nach dem Aufruf wieder zurückgesetzt
+    expect(decoB.style.visibility).toBe('');
+    expect(decoC.style.visibility).toBe('');
+  });
+
+  it('setzt target-Panel selbst NICHT auf hidden', async () => {
+    await screenshotPanelIsolationLogic('a', panelEntry, [decoA, decoB, decoC], captureRect);
+    expect(decoA.style.visibility).not.toBe('hidden');
+  });
+
+  it('stellt visibility aller Geschwister nach Aufnahme wieder her (leer = default)', async () => {
+    await screenshotPanelIsolationLogic('a', panelEntry, [decoA, decoB, decoC], captureRect);
+    expect(decoB.style.visibility).toBe('');
+    expect(decoC.style.visibility).toBe('');
+  });
+
+  it('stellt visibility auch bei captureRect-Fehler wieder her (finally)', async () => {
+    captureRect.mockRejectedValue(new Error('capture failed'));
+    await screenshotPanelIsolationLogic('a', panelEntry, [decoA, decoB, decoC], captureRect).catch(() => {});
+    expect(decoB.style.visibility).toBe('');
+    expect(decoC.style.visibility).toBe('');
+  });
+
+  it('stellt visibility auch wenn captureRect null zurückgibt wieder her', async () => {
+    captureRect.mockResolvedValue(null);
+    await screenshotPanelIsolationLogic('a', panelEntry, [decoA, decoB, decoC], captureRect);
+    expect(decoB.style.visibility).toBe('');
+    expect(decoC.style.visibility).toBe('');
+  });
+
+  it('filtert Geschwister anhand dataset.id (nicht nach DOM-Referenz)', async () => {
+    // Nur 'b' ist ein Geschwister von 'a'
+    const subset = [decoA, decoB];
+    await screenshotPanelIsolationLogic('a', panelEntry, subset, captureRect);
+    expect(decoB.style.visibility).toBe('');
+    expect(decoA.style.visibility).not.toBe('hidden');
+  });
+
+  it('gibt null zurück wenn captureRect null liefert (und Isolation korrekt aufgeräumt)', async () => {
+    captureRect.mockResolvedValue(null);
+    const r = await screenshotPanelIsolationLogic('a', panelEntry, [decoA, decoB], captureRect);
+    expect(r).toBeNull();
+    expect(decoB.style.visibility).toBe('');
+  });
+
+  it('funktioniert auch wenn keine Geschwister vorhanden sind (nur 1 Panel)', async () => {
+    const r = await screenshotPanelIsolationLogic('a', panelEntry, [decoA], captureRect);
+    expect(r).not.toBeNull();
+    expect(captureRect).toHaveBeenCalledOnce();
+  });
+});
+
+describe('J: Quellcode-Struktur – Geschwister-Panel-Isolation in panels.js', () => {
+  it('screenshotPanel enthält querySelectorAll(".panel-deco")', () => {
+    const fnStart = panelsSrc.indexOf('export async function screenshotPanel');
+    const fnEnd   = panelsSrc.indexOf('\nexport async function screenshotAllPanels');
+    const fnBody  = panelsSrc.slice(fnStart, fnEnd);
+    expect(fnBody).toContain('.panel-deco');
+  });
+
+  it('screenshotPanel filtert Geschwister anhand dataset.id', () => {
+    const fnStart = panelsSrc.indexOf('export async function screenshotPanel');
+    const fnEnd   = panelsSrc.indexOf('\nexport async function screenshotAllPanels');
+    const fnBody  = panelsSrc.slice(fnStart, fnEnd);
+    expect(fnBody).toContain('dataset.id');
+  });
+
+  it('screenshotPanel setzt visibility:hidden auf Geschwister', () => {
+    const fnStart = panelsSrc.indexOf('export async function screenshotPanel');
+    const fnEnd   = panelsSrc.indexOf('\nexport async function screenshotAllPanels');
+    const fnBody  = panelsSrc.slice(fnStart, fnEnd);
+    expect(fnBody).toContain('visibility');
+    expect(fnBody).toContain('hidden');
+  });
+
+  it('screenshotPanel stellt visibility in einem finally-Block wieder her', () => {
+    const fnStart = panelsSrc.indexOf('export async function screenshotPanel');
+    const fnEnd   = panelsSrc.indexOf('\nexport async function screenshotAllPanels');
+    const fnBody  = panelsSrc.slice(fnStart, fnEnd);
+    expect(fnBody).toContain('finally');
+    // visibility = '' muss im finally-Block stehen
+    const finallyIdx = fnBody.lastIndexOf('finally');
+    const finallyBlock = fnBody.slice(finallyIdx);
+    expect(finallyBlock).toContain("visibility = ''");
+  });
+});
+

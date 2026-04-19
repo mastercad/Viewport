@@ -875,6 +875,9 @@ body.presentation.hint-hidden #presentation-hint {
 }
 #ss-mode:hover, #ss-mode:focus { border-color: var(--accent); }
 
+/* Rahmen-Toggle neben dem Screenshot-Modus-Select */
+#ss-frame-row { user-select: none; }
+
 /* Sync-Toggle: aktiv = Akzentfarbe als Indikator */
 #sync-toggle-row { user-select: none; }
 #sync-toggle-row .tgl-label { font-weight: 600; color: var(--muted); }

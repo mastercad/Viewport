@@ -42,6 +42,10 @@ contextBridge.exposeInMainWorld('ss', {
   // (setzt gecachten Push-State zurück, damit eine frische Subscription möglich ist).
   sessionClearPush: () => ipcRenderer.invoke('session:clearPush'),
 
+  // Zeigt einen nativen „Speichern unter"-Dialog und schreibt die Datei.
+  // Funktioniert auf Linux, macOS und Windows gleich zuverlässig.
+  saveScreenshot: (b64, filename) => ipcRenderer.invoke('screenshot:save', { b64, filename }),
+
   // Öffnet einen Link im System-Standardbrowser (nur https / mailto).
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 });
