@@ -1,16 +1,50 @@
 import { state }               from './state.js';
 import { sleep, toast }        from './utils.js';
 import { screenshotAllPanels } from './panels.js';
+import { loadScreenshotSettings, saveScreenshotSettings, SS_SETTINGS_DEFAULT } from './storage.js';
 export { panelCompositeLayout } from './screenshot-utils.js';
 
-const ssBtn     = document.getElementById('screenshot-btn');
-const ssMode    = document.getElementById('ss-mode');
-const ssFrameCb = document.getElementById('ss-frame-cb');
-const workspace = document.getElementById('workspace');
-const desktopWv = document.getElementById('desktop-wv');
+const ssBtn      = document.getElementById('screenshot-btn');
+const ssSettBtn  = document.getElementById('ss-settings-btn');
+const workspace  = document.getElementById('workspace');
+const desktopWv  = document.getElementById('desktop-wv');
 
 export function wireScreenshot() {
   ssBtn.addEventListener('click', captureScreenshot);
+  wireScreenshotSettingsDialog();
+}
+
+/** Öffnet und verdrahtet den Screenshot-Einstellungs-Dialog. */
+export function wireScreenshotSettingsDialog() {
+  const dialog   = document.getElementById('ss-settings-dialog');
+  const closeBtn = document.getElementById('ss-settings-close');
+  if (!dialog || !ssSettBtn) return;
+
+  // Dialog mit gespeicherten Werten befüllen
+  const applySettings = (s) => {
+    const radio = dialog.querySelector(`input[name="ss-mode"][value="${s.mode}"]`);
+    if (radio) radio.checked = true;
+    const frameCb  = dialog.querySelector('#ss-dlg-frame-cb');
+    const labelsCb = dialog.querySelector('#ss-dlg-labels-cb');
+    if (frameCb)  frameCb.checked  = s.withFrame;
+    if (labelsCb) labelsCb.checked = s.withLabels;
+  };
+
+  ssSettBtn.addEventListener('click', () => {
+    applySettings(loadScreenshotSettings());
+    dialog.showModal();
+  });
+
+  closeBtn?.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
+
+  // Sofortige Persistierung bei jeder Änderung
+  dialog.addEventListener('change', () => {
+    const mode     = dialog.querySelector('input[name="ss-mode"]:checked')?.value ?? SS_SETTINGS_DEFAULT.mode;
+    const withFrame  = dialog.querySelector('#ss-dlg-frame-cb')?.checked  ?? SS_SETTINGS_DEFAULT.withFrame;
+    const withLabels = dialog.querySelector('#ss-dlg-labels-cb')?.checked ?? SS_SETTINGS_DEFAULT.withLabels;
+    saveScreenshotSettings({ mode, withFrame, withLabels });
+  });
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -48,8 +82,7 @@ export async function captureScreenshot() {
   document.body.classList.add('screenshot-mode');
   await sleep(200); // desktop-wv braucht Zeit um auf bottom:0 zu reflowieren
   try {
-    const mode      = ssMode?.value ?? 'single';
-    const withFrame = ssFrameCb?.checked ?? true;
+    const { mode, withFrame, withLabels } = loadScreenshotSettings();
 
     if (mode === 'combined') {
       // WYSIWYG: gesamter Workspace-Bereich als ein Bildschirmfoto
@@ -60,7 +93,7 @@ export async function captureScreenshot() {
 
     // Desktop ZUERST – vor Panels, kein Overlay einblenden (WYSIWYG)
     const desktopResult = await captureDesktopPanel();
-    const panelResults  = state.panels.size > 0 ? (await screenshotAllPanels({ withFrame })) : [];
+    const panelResults  = state.panels.size > 0 ? (await screenshotAllPanels({ withFrame, withLabels })) : [];
 
     const results = [
       ...(desktopResult ? [desktopResult] : []),

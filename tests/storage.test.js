@@ -12,6 +12,7 @@ import {
   saveCustomDevice, loadCustomDevices,
   saveTemplate, loadTemplates, deleteTemplate,
   BUILTIN_TEMPLATES,
+  saveScreenshotSettings, loadScreenshotSettings, SS_SETTINGS_DEFAULT,
 } from '../src/renderer/storage.js';
 
 // ─── localStorage-Mock ───────────────────────────────────────────────────────
@@ -275,6 +276,117 @@ describe('deleteTemplate', () => {
 
   it('wirft keinen Fehler auf leerem Speicher', () => {
     expect(() => deleteTemplate('irgendwas')).not.toThrow();
+  });
+});
+
+// ─── SS_SETTINGS_DEFAULT ──────────────────────────────────────────────────────
+
+describe('SS_SETTINGS_DEFAULT', () => {
+  it('enthält alle erwarteten Standardfelder', () => {
+    expect(SS_SETTINGS_DEFAULT).toMatchObject({
+      mode:       expect.stringMatching(/^(single|workspace|combined)$/),
+      withFrame:  expect.any(Boolean),
+      withLabels: expect.any(Boolean),
+    });
+  });
+
+  it('Standard-Modus ist "single"', () => {
+    expect(SS_SETTINGS_DEFAULT.mode).toBe('single');
+  });
+
+  it('Rahmen und Labels sind standardmäßig aktiv', () => {
+    expect(SS_SETTINGS_DEFAULT.withFrame).toBe(true);
+    expect(SS_SETTINGS_DEFAULT.withLabels).toBe(true);
+  });
+});
+
+// ─── loadScreenshotSettings ───────────────────────────────────────────────────
+
+describe('loadScreenshotSettings', () => {
+  it('gibt Standard-Einstellungen bei leerem Speicher zurück', () => {
+    expect(loadScreenshotSettings()).toEqual(SS_SETTINGS_DEFAULT);
+  });
+
+  it('gibt Standard-Einstellungen bei ungültigem JSON zurück', () => {
+    mockStore['blickfang:ssSettings'] = 'kein-json{';
+    expect(loadScreenshotSettings()).toEqual(SS_SETTINGS_DEFAULT);
+  });
+
+  it('gibt Standard-Einstellungen zurück wenn mode ungültig ist', () => {
+    mockStore['blickfang:ssSettings'] = JSON.stringify({ mode: 'unbekannt', withFrame: false, withLabels: false });
+    const s = loadScreenshotSettings();
+    expect(s.mode).toBe(SS_SETTINGS_DEFAULT.mode);
+  });
+
+  it('behält withFrame=false wenn gespeichert', () => {
+    mockStore['blickfang:ssSettings'] = JSON.stringify({ mode: 'single', withFrame: false, withLabels: true });
+    expect(loadScreenshotSettings().withFrame).toBe(false);
+  });
+
+  it('behält withLabels=false wenn gespeichert', () => {
+    mockStore['blickfang:ssSettings'] = JSON.stringify({ mode: 'single', withFrame: true, withLabels: false });
+    expect(loadScreenshotSettings().withLabels).toBe(false);
+  });
+
+  it('akzeptiert alle drei gültigen Modi', () => {
+    for (const mode of ['single', 'workspace', 'combined']) {
+      mockStore['blickfang:ssSettings'] = JSON.stringify({ mode, withFrame: true, withLabels: true });
+      expect(loadScreenshotSettings().mode).toBe(mode);
+    }
+  });
+
+  it('füllt fehlende Felder mit Standardwerten auf', () => {
+    mockStore['blickfang:ssSettings'] = JSON.stringify({ mode: 'workspace' });
+    const s = loadScreenshotSettings();
+    expect(s.withFrame).toBe(SS_SETTINGS_DEFAULT.withFrame);
+    expect(s.withLabels).toBe(SS_SETTINGS_DEFAULT.withLabels);
+  });
+});
+
+// ─── saveScreenshotSettings + loadScreenshotSettings ─────────────────────────
+
+describe('saveScreenshotSettings + loadScreenshotSettings', () => {
+  it('speichert und lädt vollständige Einstellungen zurück', () => {
+    const s = { mode: 'workspace', withFrame: false, withLabels: false };
+    saveScreenshotSettings(s);
+    expect(loadScreenshotSettings()).toEqual(s);
+  });
+
+  it('überschreibt vorherige Einstellungen', () => {
+    saveScreenshotSettings({ mode: 'single',    withFrame: true,  withLabels: true  });
+    saveScreenshotSettings({ mode: 'combined',  withFrame: false, withLabels: false });
+    expect(loadScreenshotSettings()).toEqual({ mode: 'combined', withFrame: false, withLabels: false });
+  });
+
+  it('speichert mode=combined korrekt', () => {
+    saveScreenshotSettings({ mode: 'combined', withFrame: true, withLabels: true });
+    expect(loadScreenshotSettings().mode).toBe('combined');
+  });
+
+  it('speichert mode=workspace korrekt', () => {
+    saveScreenshotSettings({ mode: 'workspace', withFrame: true, withLabels: true });
+    expect(loadScreenshotSettings().mode).toBe('workspace');
+  });
+
+  it('speichert withFrame=false korrekt', () => {
+    saveScreenshotSettings({ mode: 'single', withFrame: false, withLabels: true });
+    expect(loadScreenshotSettings().withFrame).toBe(false);
+  });
+
+  it('speichert withLabels=false korrekt', () => {
+    saveScreenshotSettings({ mode: 'single', withFrame: true, withLabels: false });
+    expect(loadScreenshotSettings().withLabels).toBe(false);
+  });
+
+  it('schreibt in den Schlüssel blickfang:ssSettings', () => {
+    saveScreenshotSettings({ mode: 'single', withFrame: true, withLabels: true });
+    expect(mockStore['blickfang:ssSettings']).toBeDefined();
+    expect(() => JSON.parse(mockStore['blickfang:ssSettings'])).not.toThrow();
+  });
+
+  it('wirft keinen Fehler wenn localStorage voll ist', () => {
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    expect(() => saveScreenshotSettings({ mode: 'single', withFrame: true, withLabels: true })).not.toThrow();
   });
 });
 

@@ -924,8 +924,9 @@ describe('I: Quellcode-Struktur – withFrame-Implementierung', () => {
     expect(fnBody).toContain('withFrame');
   });
 
-  it('screenshot.js liest ss-frame-cb aus dem DOM', () => {
-    expect(screenshotSrc2).toContain('ss-frame-cb');
+  it('screenshot.js liest withFrame aus loadScreenshotSettings (nicht mehr aus dem DOM)', () => {
+    expect(screenshotSrc2).toContain('loadScreenshotSettings');
+    expect(screenshotSrc2).not.toContain('ss-frame-cb');
   });
 
   it('screenshot.js übergibt withFrame an screenshotAllPanels', () => {

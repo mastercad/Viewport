@@ -465,7 +465,7 @@ export function navigateAllPanels(url) {
   }
 }
 
-export async function screenshotPanel(id, { withFrame = true } = {}) {
+export async function screenshotPanel(id, { withFrame = true, withLabels = true } = {}) {
   const p = state.panels.get(id);
   if (!p) return null;
 
@@ -475,6 +475,7 @@ export async function screenshotPanel(id, { withFrame = true } = {}) {
     .filter(el => el.dataset.id !== String(id));
   siblings.forEach(el => { el.style.visibility = 'hidden'; });
 
+  if (!withLabels) document.body.classList.add('ss-hide-labels');
   try {
     // withFrame=true  → ganzes panel-deco (CSS-Geräterahmen + Inhalt, WYSIWYG)
     // withFrame=false → nur panel-viewport (reiner Seiten-Inhalt, kein Rahmen)
@@ -503,13 +504,14 @@ export async function screenshotPanel(id, { withFrame = true } = {}) {
   } finally {
     // Sichtbarkeit aller Geschwister-Panels immer wiederherstellen.
     siblings.forEach(el => { el.style.visibility = ''; });
+    if (!withLabels) document.body.classList.remove('ss-hide-labels');
   }
 }
 
-export async function screenshotAllPanels({ withFrame = true } = {}) {
+export async function screenshotAllPanels({ withFrame = true, withLabels = true } = {}) {
   const results = [];
   for (const [id] of state.panels) {
-    const r = await screenshotPanel(id, { withFrame });
+    const r = await screenshotPanel(id, { withFrame, withLabels });
     if (r) results.push(r);
   }
   return results;

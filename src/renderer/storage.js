@@ -1,6 +1,11 @@
-const LS_LAYOUT    = 'blickfang:layout';
-const LS_CUSTOMS   = 'blickfang:customDevices';
-const LS_TEMPLATES = 'blickfang:templates';
+const LS_LAYOUT      = 'blickfang:layout';
+const LS_CUSTOMS     = 'blickfang:customDevices';
+const LS_TEMPLATES   = 'blickfang:templates';
+const LS_SS_SETTINGS = 'blickfang:ssSettings';
+
+/** @typedef {{ mode: 'single'|'workspace'|'combined', withFrame: boolean, withLabels: boolean }} ScreenshotSettings */
+/** @type {ScreenshotSettings} */
+export const SS_SETTINGS_DEFAULT = { mode: 'single', withFrame: true, withLabels: true };
 
 /* ── Built-in Templates (nicht löschbar) ─────────────────────── */
 export const BUILTIN_TEMPLATES = [
@@ -84,4 +89,25 @@ export function saveTemplate(tpl) {
 export function deleteTemplate(id) {
   const list = loadTemplates().filter(t => t.id !== id);
   try { localStorage.setItem(LS_TEMPLATES, JSON.stringify(list)); } catch { /* ignore */ }
+}
+
+/* ── Screenshot-Einstellungen ────────────────────────────────── */
+
+/** @param {ScreenshotSettings} s */
+export function saveScreenshotSettings(s) {
+  try { localStorage.setItem(LS_SS_SETTINGS, JSON.stringify(s)); } catch { /* ignore */ }
+}
+
+/** @returns {ScreenshotSettings} */
+export function loadScreenshotSettings() {
+  try {
+    const raw = localStorage.getItem(LS_SS_SETTINGS);
+    if (!raw) return { ...SS_SETTINGS_DEFAULT };
+    const parsed = JSON.parse(raw);
+    return {
+      mode:       ['single', 'workspace', 'combined'].includes(parsed.mode) ? parsed.mode : SS_SETTINGS_DEFAULT.mode,
+      withFrame:  typeof parsed.withFrame  === 'boolean' ? parsed.withFrame  : SS_SETTINGS_DEFAULT.withFrame,
+      withLabels: typeof parsed.withLabels === 'boolean' ? parsed.withLabels : SS_SETTINGS_DEFAULT.withLabels,
+    };
+  } catch { return { ...SS_SETTINGS_DEFAULT }; }
 }

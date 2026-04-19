@@ -282,17 +282,19 @@
           Screenshot
         </button>
 
-        <select id="ss-mode" title="Screenshot-Modus">
-          <option value="workspace">Workspace-Layout</option>
-          <option value="combined">Nebeneinander</option>
-          <option value="single">Einzeln</option>
-        </select>
-
-        <label class="toggle-row" id="ss-frame-row" title="Screenshot mit oder ohne Geräterahmen speichern">
-          <input type="checkbox" id="ss-frame-cb" checked>
-          <span class="tgl-track"><span class="tgl-thumb"></span></span>
-          <span class="tgl-label">Rahmen</span>
-        </label>
+        <button id="ss-settings-btn" class="icon-btn" title="Screenshot-Einstellungen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33
+              1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06
+              a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09
+              A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68
+              a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06
+              a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09
+              a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
 
         <button id="annotate-btn" class="btn btn-ghost"
           title="Screenshot-Editor – Pfeile, Kreise, Lupe in den Screenshot einzeichnen">
@@ -388,6 +390,92 @@
 
   <!-- ══════════════════════════ TOASTS ═══════════════════════════════════ -->
   <div id="toasts" aria-live="assertive" aria-atomic="true"></div>
+
+  <!-- ══════════ SCREENSHOT-EINSTELLUNGEN-DIALOG ══════════════════════════ -->
+  <dialog id="ss-settings-dialog" aria-labelledby="ss-settings-h">
+    <div class="ss-dlg-inner">
+      <div class="ss-dlg-head">
+        <h2 id="ss-settings-h">Screenshot-Einstellungen</h2>
+        <button id="ss-settings-close" class="icon-btn" aria-label="Schließen">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+            <line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="ss-dlg-body">
+        <p class="ss-dlg-section-label">Modus</p>
+        <div class="ss-mode-cards" role="radiogroup" aria-label="Screenshot-Modus">
+
+          <label class="ss-mode-card">
+            <input type="radio" name="ss-mode" value="single">
+            <span class="ss-card-inner">
+              <span class="ss-card-preview" aria-hidden="true">
+                <!-- Einzeln: ein zentriertes Geräte-Panel -->
+                <svg viewBox="0 0 80 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="14" y="6" width="52" height="44" rx="4" fill="var(--ss-card-fill)" stroke="var(--ss-card-stroke)" stroke-width="2"/>
+                  <rect x="18" y="14" width="44" height="30" rx="2" fill="var(--ss-card-vp)"/>
+                  <rect x="28" y="8" width="24" height="4" rx="2" fill="var(--ss-card-stroke)" opacity=".4"/>
+                </svg>
+              </span>
+              <span class="ss-card-label">Einzeln</span>
+              <span class="ss-card-desc">Je Gerät eine separate Datei</span>
+            </span>
+          </label>
+
+          <label class="ss-mode-card">
+            <input type="radio" name="ss-mode" value="workspace">
+            <span class="ss-card-inner">
+              <span class="ss-card-preview" aria-hidden="true">
+                <!-- Workspace-Layout: mehrere Panels an verschiedenen Positionen -->
+                <svg viewBox="0 0 80 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="4" y="4" width="72" height="48" rx="3" fill="var(--ss-card-bg)" stroke="var(--ss-card-stroke)" stroke-width="1.5" stroke-dasharray="4 3"/>
+                  <rect x="8" y="8" width="32" height="22" rx="3" fill="var(--ss-card-fill)" stroke="var(--ss-card-stroke)" stroke-width="1.5"/>
+                  <rect x="10" y="12" width="28" height="14" rx="1.5" fill="var(--ss-card-vp)"/>
+                  <rect x="44" y="26" width="28" height="22" rx="3" fill="var(--ss-card-fill)" stroke="var(--ss-card-stroke)" stroke-width="1.5"/>
+                  <rect x="46" y="30" width="24" height="14" rx="1.5" fill="var(--ss-card-vp)"/>
+                </svg>
+              </span>
+              <span class="ss-card-label">Layout</span>
+              <span class="ss-card-desc">Alle Geräte an ihrer Position</span>
+            </span>
+          </label>
+
+          <label class="ss-mode-card">
+            <input type="radio" name="ss-mode" value="combined">
+            <span class="ss-card-inner">
+              <span class="ss-card-preview" aria-hidden="true">
+                <!-- Kombiniert: WYSIWYG des gesamten Workspace -->
+                <svg viewBox="0 0 80 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="4" y="4" width="72" height="48" rx="3" fill="var(--ss-card-fill)" stroke="var(--ss-card-stroke)" stroke-width="2"/>
+                  <rect x="8" y="10" width="30" height="38" rx="2" fill="var(--ss-card-vp)"/>
+                  <rect x="42" y="10" width="30" height="38" rx="2" fill="var(--ss-card-vp)"/>
+                  <rect x="8" y="8" width="30" height="4" rx="1.5" fill="var(--ss-card-stroke)" opacity=".25"/>
+                  <rect x="42" y="8" width="30" height="4" rx="1.5" fill="var(--ss-card-stroke)" opacity=".25"/>
+                </svg>
+              </span>
+              <span class="ss-card-label">Kombiniert</span>
+              <span class="ss-card-desc">Workspace als ein Bild (WYSIWYG)</span>
+            </span>
+          </label>
+
+        </div>
+
+        <div class="ss-dlg-toggles">
+          <label class="toggle-row ss-dlg-toggle">
+            <input type="checkbox" id="ss-dlg-frame-cb" checked>
+            <span class="tgl-track"><span class="tgl-thumb"></span></span>
+            <span class="tgl-label">Geräterahmen einblenden</span>
+          </label>
+          <label class="toggle-row ss-dlg-toggle">
+            <input type="checkbox" id="ss-dlg-labels-cb" checked>
+            <span class="tgl-track"><span class="tgl-thumb"></span></span>
+            <span class="tgl-label">Gerätenamen einblenden</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </dialog>
 
   <!-- ══════════════════════════ KEYS-DIALOG ═════════════════════════════ -->
   <div id="keys-dlg" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="keys-dlg-h">

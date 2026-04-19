@@ -866,17 +866,9 @@ body.presentation.hint-hidden #presentation-hint {
 .tb-group { display: flex; align-items: center; gap: 12px; }
 .tb-right  { margin-left: auto; }
 
-/* Screenshot-Modus Select */
-#ss-mode {
-  font-size: 13px; color: var(--fg); background: var(--bg);
-  border: 1px solid var(--border); border-radius: 6px;
-  padding: 4px 8px; cursor: pointer; outline: none;
-  transition: border-color .15s;
-}
-#ss-mode:hover, #ss-mode:focus { border-color: var(--accent); }
-
-/* Rahmen-Toggle neben dem Screenshot-Modus-Select */
-#ss-frame-row { user-select: none; }
+/* Gerätenamen global ausblenden während Screenshot (withLabels=false) */
+body.ss-hide-labels .panel-titlelabel,
+body.ss-hide-labels .hud-label { visibility: hidden !important; }
 
 /* Sync-Toggle: aktiv = Akzentfarbe als Indikator */
 #sync-toggle-row { user-select: none; }
@@ -913,6 +905,96 @@ body.presentation.hint-hidden #presentation-hint {
 }
 .toggle-row input:checked ~ .tgl-track .tgl-thumb { transform: translateX(16px); }
 .tgl-label { font-size: 13px; }
+
+/* ── Screenshot-Einstellungen-Dialog ──────────────────────────────────── */
+#ss-settings-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 60px);
+  border: 1.5px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  padding: 0;
+  overflow: hidden;
+  color: var(--text);
+}
+#ss-settings-dialog::backdrop {
+  background: rgba(0,0,0,.35);
+  backdrop-filter: blur(3px);
+}
+.ss-dlg-inner { display: flex; flex-direction: column; }
+.ss-dlg-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ss-dlg-head h2 { font-size: 16px; font-weight: 700; }
+.ss-dlg-body { padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+.ss-dlg-section-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--muted); margin: 0 0 10px;
+}
+
+/* Radio-Karten für Screenshot-Modi */
+.ss-mode-cards {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+}
+.ss-mode-card {
+  cursor: pointer;
+  position: relative;
+}
+.ss-mode-card input[type="radio"] {
+  position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%;
+  cursor: pointer; margin: 0;
+}
+.ss-card-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 12px 8px 10px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.ss-mode-card:hover .ss-card-inner {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.ss-mode-card input:checked ~ .ss-card-inner {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  box-shadow: 0 0 0 3px rgba(67,97,238,.15);
+}
+.ss-card-preview {
+  width: 80px; height: 56px; display: block;
+  --ss-card-fill:   var(--border);
+  --ss-card-bg:     var(--bg);
+  --ss-card-stroke: var(--muted);
+  --ss-card-vp:     #fff;
+}
+.ss-mode-card input:checked ~ .ss-card-inner .ss-card-preview {
+  --ss-card-fill:   var(--accent-light);
+  --ss-card-stroke: var(--accent);
+  --ss-card-vp:     #fff;
+}
+.ss-card-preview svg { width: 100%; height: 100%; }
+.ss-card-label {
+  font-size: 12px; font-weight: 700; color: var(--text);
+}
+.ss-card-desc {
+  font-size: 10.5px; color: var(--muted); text-align: center; line-height: 1.4;
+}
+
+/* Toggles im Dialog */
+.ss-dlg-toggles { display: flex; flex-direction: column; gap: 12px; }
+.ss-dlg-toggle { color: var(--text); }
+
+body.dark #ss-settings-dialog {
+  background: var(--surface);
+  border-color: var(--border);
+}
 
 .badge {
   font-size: 12px; font-weight: 600; color: var(--muted);
