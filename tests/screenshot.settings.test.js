@@ -30,7 +30,7 @@
  *     – index.html enthält #ss-settings-dialog
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'fs';
 import path             from 'path';
 
