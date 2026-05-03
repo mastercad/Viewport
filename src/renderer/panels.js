@@ -252,6 +252,43 @@ export function toggleMaximize(id) {
   applyDecoRect(p);
 }
 
+export function rotatePanel(id) {
+  const p = state.panels.get(id);
+  if (!p) return;
+  const { def } = p;
+
+  // Breite und Höhe tauschen
+  [def.w, def.h] = [def.h, def.w];
+
+  // Frame-Werte rotieren (90°: oben→rechts, rechts→unten, unten→links, links→oben)
+  if (def.frame) {
+    const { t = 0, r = 0, b = 0, l = 0 } = def.frame;
+    def.frame = { t: l, r: t, b: r, l: b };
+  }
+
+  // CSS-Variablen für Frame aktualisieren
+  const { decoEl } = p;
+  decoEl.style.setProperty('--ft', (def.frame?.t ?? 0) + 'px');
+  decoEl.style.setProperty('--fb', (def.frame?.b ?? 0) + 'px');
+  decoEl.style.setProperty('--fl', (def.frame?.l ?? 0) + 'px');
+  decoEl.style.setProperty('--fr', (def.frame?.r ?? 0) + 'px');
+
+  // Rect neu berechnen (Position beibehalten)
+  const fw = (def.frame?.l ?? 0) + (def.frame?.r ?? 0);
+  const fh = (def.frame?.t ?? 0) + (def.frame?.b ?? 0);
+  p.rect = { ...p.rect, w: def.w + fw, h: def.h + FRAME_HEAD_H + fh };
+
+  // Viewport-Emulation aktualisieren
+  const wv = decoEl.querySelector('.panel-webview');
+  if (wv) {
+    const { mobile, ua } = getDeviceEmulationOpts(def);
+    window.ss.setViewport(wv.getWebContentsId(), def.w, def.h, { mobile, ua });
+  }
+
+  applyDecoRect(p);
+  saveLayout(state.panels);
+}
+
 export function autoArrange() {
   if (state.panels.size === 0) return;
   const PAD = 14;
@@ -465,44 +502,51 @@ export function navigateAllPanels(url) {
   }
 }
 
+const DEVICE_RADIUS = { iphone: 46, android: 46, tablet: 24, laptop: 12, desktop: 8 };
+
 export async function screenshotPanel(id, { withFrame = true, withLabels = true } = {}) {
   const p = state.panels.get(id);
   if (!p) return null;
-
-  // Alle ANDEREN Panel-Decos ausblenden, damit überlappende Geräteansichten
-  // nicht in den captureRect-Bildausschnitt dieses Panels hineinstrahlen.
-  const siblings = [...document.querySelectorAll('.panel-deco')]
-    .filter(el => el.dataset.id !== String(id));
+  const siblings = [...document.querySelectorAll('.panel-deco')].filter(el => el.dataset.id !== String(id));
   siblings.forEach(el => { el.style.visibility = 'hidden'; });
-
   if (!withLabels) document.body.classList.add('ss-hide-labels');
+  const wv = p.decoEl.querySelector('.panel-webview');
   try {
-    // withFrame=true  → ganzes panel-deco (CSS-Geräterahmen + Inhalt, WYSIWYG)
-    // withFrame=false → nur panel-viewport (reiner Seiten-Inhalt, kein Rahmen)
-    const target = withFrame
-      ? p.decoEl
-      : (p.decoEl.querySelector('.panel-viewport') ?? p.decoEl);
-    const br = target.getBoundingClientRect();
-    const png = await window.ss.captureRect({
-      x:      Math.round(br.left),
-      y:      Math.round(br.top),
-      width:  Math.round(br.width),
-      height: Math.round(br.height),
-    });
-    if (!png) return null;
-    const s = p.scale ?? state.panelScale;
+    const s   = p.scale ?? state.panelScale;
+    const { def } = p;
+    const targetEl  = withFrame ? p.decoEl : (p.decoEl.querySelector('.panel-viewport') ?? wv);
+    const radiusCss = withFrame ? (DEVICE_RADIUS[p.decoEl.dataset.device] ?? 8) : 0;
+    const br = targetEl.getBoundingClientRect();
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const raw = await window.ss.captureRect({ x: Math.round(br.left), y: Math.round(br.top), width: Math.round(br.width), height: Math.round(br.height) });
+    if (!raw) return null;
+    const img = new Image();
+    await new Promise(res => { img.onload = res; img.src = 'data:image/png;base64,' + raw; });
+    const pw = img.naturalWidth, ph = img.naturalHeight, dpr = pw / Math.round(br.width);
+    const cv = document.createElement('canvas');
+    cv.width = pw; cv.height = ph;
+    const ctx = cv.getContext('2d');
+    if (radiusCss > 0) {
+      const rPx = Math.min(radiusCss * s * dpr, pw / 2, ph / 2);
+      ctx.save(); ctx.beginPath();
+      ctx.moveTo(rPx, 0); ctx.lineTo(pw-rPx, 0); ctx.arcTo(pw, 0,  pw, rPx,     rPx);
+      ctx.lineTo(pw, ph-rPx);                      ctx.arcTo(pw, ph, pw-rPx, ph,  rPx);
+      ctx.lineTo(rPx, ph);                          ctx.arcTo(0,  ph, 0,  ph-rPx, rPx);
+      ctx.lineTo(0, rPx);                           ctx.arcTo(0,  0,  rPx, 0,     rPx);
+      ctx.closePath(); ctx.clip();
+    }
+    ctx.drawImage(img, 0, 0);
+    if (radiusCss > 0) ctx.restore();
+    const fl = def.frame?.l ?? 0, ft = def.frame?.t ?? 0;
     return {
-      id,
-      label:  p.def.label,
-      w:      Math.round(br.width),
-      h:      Math.round(br.height),
-      wsX:    p.rect.x,
-      wsY:    p.rect.y,
-      scale:  s,
-      png,
+      id, label: def.label,
+      w: Math.round(br.width), h: Math.round(br.height),
+      wsX: withFrame ? p.rect.x : p.rect.x + Math.round(fl * s),
+      wsY: withFrame ? p.rect.y : p.rect.y + Math.round((FRAME_HEAD_H + ft) * s),
+      scale: s, png: cv.toDataURL('image/png').split(',')[1],
     };
   } finally {
-    // Sichtbarkeit aller Geschwister-Panels immer wiederherstellen.
+    if (wv) wv.style.visibility = '';
     siblings.forEach(el => { el.style.visibility = ''; });
     if (!withLabels) document.body.classList.remove('ss-hide-labels');
   }
@@ -566,6 +610,9 @@ function createDecoEl(id, def, _scale = state.panelScale) {
       <div class="hud-sep"></div>
       <button class="hud-btn" data-hud="reload" title="Neu laden">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 7A5.5 5.5 0 1 0 3.2 3.2M1.5 1v2.5H4"/></svg>
+      </button>
+      <button class="hud-btn" data-hud="rotate" title="Ausrichtung drehen">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 5.5A5 5 0 1 0 8.5 12.2"/><polyline points="9.5,3.5 11.5,5.5 13.5,3.5"/></svg>
       </button>
       <button class="hud-btn" data-hud="scale-" title="Verkleinern">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2.5" y1="7" x2="11.5" y2="7"/></svg>
@@ -696,6 +743,7 @@ function createDecoEl(id, def, _scale = state.panelScale) {
         }
         break;
       }
+      case 'rotate': rotatePanel(id); break;
       case 'close': removePanel(id); break;
     }
   });

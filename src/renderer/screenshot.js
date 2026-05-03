@@ -93,6 +93,8 @@ export async function captureScreenshot() {
 
     // Desktop ZUERST – vor Panels, kein Overlay einblenden (WYSIWYG)
     const desktopResult = await captureDesktopPanel();
+    // Einmalig warten bevor die Panel-Captures starten – für alle Panel-Typen.
+    if (state.panels.size > 0) await sleep(400);
     const panelResults  = state.panels.size > 0 ? (await screenshotAllPanels({ withFrame, withLabels })) : [];
 
     const results = [
@@ -164,7 +166,11 @@ async function downloadWorkspaceComposite(results) {
   for (const r of sorted) {
     const img = new Image();
     await new Promise(res => { img.onload = res; img.src = 'data:image/png;base64,' + r.png; });
-    ctx.drawImage(img, PAD + r.wsX, PAD + r.wsY, r.w, r.h);
+    // visW/visH = skalierte Darstellungsgröße (bei withFrame=false explizit gesetzt).
+    // Bei withFrame=true sind w/h bereits die visuellen CSS-Pixel (aus decoBr).
+    const dw = r.visW ?? r.w;
+    const dh = r.visH ?? r.h;
+    ctx.drawImage(img, PAD + r.wsX, PAD + r.wsY, dw, dh);
   }
 
   await blobDownload(cv, ssFilename('screenshare_layout'));
