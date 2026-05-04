@@ -28,7 +28,7 @@ let _stackOrder = [];
 let _navSaveTimer = null;
 function scheduleNavSave() {
   clearTimeout(_navSaveTimer);
-  _navSaveTimer = setTimeout(() => saveLayout(state.panels), 800);
+  _navSaveTimer = setTimeout(() => saveLayout(state.panels, state.wsRect), 800);
 }
 
 const _wvReady  = new WeakSet();
@@ -96,8 +96,8 @@ function clearSnapGuides() {
 }
 
 export async function addPanel(def, opts = {}) {
-  const rect  = opts.rect  ?? calcInitialRect(def);
   const scale = opts.scale ?? state.panelScale;
+  const rect  = opts.rect ? clampRect(opts.rect, scale) : calcInitialRect(def);
   const id    = String(++_panelCounter);
   const url   = opts.url   ?? document.getElementById('url-input').value.trim();
   const decoEl = createDecoEl(id, def, scale);
@@ -139,13 +139,14 @@ export async function addPanel(def, opts = {}) {
   }
   updateChips();
   showWorkspace();
-  if (!opts.skipSave) saveLayout(state.panels);
+  if (!opts.skipSave) saveLayout(state.panels, state.wsRect);
 }
 
 export function removePanel(id) {
   const p = state.panels.get(id);
   if (!p) return;
   maybeExitFocusOnRemove(id);
+  if (p.decoEl._hudCleanup) p.decoEl._hudCleanup();
   if (p.decoEl._hudMoveHandler) {
     document.removeEventListener('mousemove', p.decoEl._hudMoveHandler);
   }
@@ -161,7 +162,7 @@ export function removePanel(id) {
     if (panel) panel.decoEl.style.zIndex = 10 + idx;
   });
   updateChips();
-  saveLayout(state.panels);
+  saveLayout(state.panels, state.wsRect);
 }
 
 export function openPreset(presetId) {
@@ -286,7 +287,7 @@ export function rotatePanel(id) {
   }
 
   applyDecoRect(p);
-  saveLayout(state.panels);
+  saveLayout(state.panels, state.wsRect);
 }
 
 export function autoArrange() {
@@ -311,7 +312,7 @@ export function autoArrange() {
     x += vw + PAD;
     rowH = Math.max(rowH, vh);
   }
-  saveLayout(state.panels);
+  saveLayout(state.panels, state.wsRect);
   toast('Panels angeordnet', 'info');
 }
 
@@ -410,7 +411,7 @@ function onDragEnd() {
   }
   for (const p of state.panels.values()) applyDecoRect(p);
   document.querySelectorAll('webview').forEach(wv => { wv.style.pointerEvents = ''; });
-  saveLayout(state.panels);
+  saveLayout(state.panels, state.wsRect);
 }
 
 function onDragKey(e) {
@@ -463,7 +464,7 @@ function onResizeEnd() {
   document.removeEventListener('keydown',      onResizeKey);
   window.removeEventListener('blur',           onResizeEnd);
   document.querySelectorAll('webview').forEach(wv => { wv.style.pointerEvents = ''; });
-  saveLayout(state.panels);
+  saveLayout(state.panels, state.wsRect);
 }
 
 function onResizeKey(e) {
@@ -621,6 +622,9 @@ function createDecoEl(id, def, _scale = state.panelScale) {
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="7" y1="2.5" x2="7" y2="11.5"/><line x1="2.5" y1="7" x2="11.5" y2="7"/></svg>
       </button>
       <div class="hud-sep"></div>
+      <button class="hud-btn hud-present" data-hud="present" title="Als Vollbild präsentieren (Esc zum Beenden)">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="2" width="12" height="9" rx="1.2"/><line x1="5" y1="13" x2="9" y2="13"/><line x1="7" y1="11" x2="7" y2="13"/></svg>
+      </button>
       <button class="hud-btn hud-close" data-hud="close" title="Schließen">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2.5" y1="2.5" x2="11.5" y2="11.5"/><line x1="11.5" y1="2.5" x2="2.5" y2="11.5"/></svg>
       </button>
@@ -699,7 +703,7 @@ function createDecoEl(id, def, _scale = state.panelScale) {
       titleLabel.textContent = newLabel;
       titleLabel._renaming = false;
       if (hudLabel) hudLabel.textContent = newLabel;
-      saveLayout(state.panels);
+      saveLayout(state.panels, state.wsRect);
     };
     inp.addEventListener('blur', save);
     inp.addEventListener('keydown', ke => {
@@ -731,7 +735,7 @@ function createDecoEl(id, def, _scale = state.panelScale) {
         if (p) {
           p.scale = Math.max(0.15, (p.scale ?? state.panelScale) - 0.1);
           applyDecoRect(p);
-          saveLayout(state.panels);
+          saveLayout(state.panels, state.wsRect);
         }
         break;
       }
@@ -739,24 +743,73 @@ function createDecoEl(id, def, _scale = state.panelScale) {
         if (p) {
           p.scale = Math.min(2.0, (p.scale ?? state.panelScale) + 0.1);
           applyDecoRect(p);
-          saveLayout(state.panels);
+          saveLayout(state.panels, state.wsRect);
         }
         break;
       }
       case 'rotate': rotatePanel(id); break;
+      case 'present':
+        if (el.classList.contains('presenting')) {
+          window.dispatchEvent(new CustomEvent('ss:exit-present-panel'));
+        } else {
+          window.dispatchEvent(new CustomEvent('ss:present-panel', { detail: { id } }));
+        }
+        break;
       case 'close': removePanel(id); break;
     }
   });
 
+  const DWELL_SHOW = 350;
+  const DWELL_SHOW_PRESENT = 120;
+  const DWELL_HIDE = 200;
+  let _hudShowTimer = null;
+  let _hudHideTimer = null;
+
   const _hudMove = e => {
-    const r = el.getBoundingClientRect();
-    el.classList.toggle('hud-visible',
-      e.clientX >= r.left && e.clientX <= r.right &&
-      e.clientY >= r.top  && e.clientY <= r.bottom,
-    );
+    const presenting = el.classList.contains('presenting');
+    // Maus über dem HUD dieses Panels → immer sichtbar halten
+    const overHud = el.contains(e.target) && !!e.target.closest('.panel-hud');
+    let inside;
+    if (overHud) {
+      inside = true;
+    } else if (presenting) {
+      // Present-Mode: HUD ist per CSS auf fixed top:10px gesetzt (~46px hoch),
+      // Trigger-Zone deckt den Bereich sicher ab.
+      inside = e.clientY <= 64;
+    } else {
+      // Normal-Modus: nur Frame-Kopf-Zone auslösen
+      const r = el.getBoundingClientRect();
+      inside = e.clientX >= r.left && e.clientX <= r.right &&
+               e.clientY >= r.top  && e.clientY <= r.top + FRAME_HEAD_H;
+    }
+
+    if (inside) {
+      clearTimeout(_hudHideTimer);
+      _hudHideTimer = null;
+      if (!el.classList.contains('hud-visible') && !_hudShowTimer) {
+        const delay = el.classList.contains('presenting') ? DWELL_SHOW_PRESENT : DWELL_SHOW;
+        _hudShowTimer = setTimeout(() => {
+          _hudShowTimer = null;
+          el.classList.add('hud-visible');
+        }, delay);
+      }
+    } else {
+      clearTimeout(_hudShowTimer);
+      _hudShowTimer = null;
+      if (el.classList.contains('hud-visible') && !_hudHideTimer) {
+        _hudHideTimer = setTimeout(() => {
+          _hudHideTimer = null;
+          el.classList.remove('hud-visible');
+        }, DWELL_HIDE);
+      }
+    }
   };
   document.addEventListener('mousemove', _hudMove);
   el._hudMoveHandler = _hudMove;
+  el._hudCleanup = () => {
+    clearTimeout(_hudShowTimer);
+    clearTimeout(_hudHideTimer);
+  };
 
   return el;
 }

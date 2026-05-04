@@ -56,8 +56,86 @@ function desktopNavigateSmart(url) {
    Init
    ═══════════════════════════════════════════════════════════════ */
 
+/**
+ * Bildet ein Panel-Rect von einem Workspace auf einen anderen ab und
+ * erhält dabei die relative Position innerhalb des freien Bewegungsraums.
+ * Beispiel: Panel klebt am rechten Rand  → bleibt am rechten Rand.
+ *           Panel ist zentriert           → bleibt zentriert.
+ * Funktioniert korrekt weil Panels eine feste visuelle Größe haben.
+ */
+function remapPanelRect(rect, scale, oldWs, newWs) {
+  const s   = scale ?? state.panelScale;
+  const vw  = rect.w * s;
+  const vh  = rect.h * s;
+  // freier Raum (wie weit darf das Panel maximal verschoben werden?)
+  const freeOldW = Math.max(1, oldWs.w - vw);
+  const freeOldH = Math.max(1, oldWs.h - vh);
+  const freeNewW = Math.max(0, newWs.w - vw);
+  const freeNewH = Math.max(0, newWs.h - vh);
+  // relative Position 0..1 (0=links/oben, 1=rechts/unten)
+  const relX = Math.max(0, Math.min(1, rect.x / freeOldW));
+  const relY = Math.max(0, Math.min(1, rect.y / freeOldH));
+  // Nearest-Edge-Anker: Panels in der rechten Hälfte behalten den absoluten
+  // Abstand zur rechten Kante (Gap exakt erhalten, kein kumulativer Drift).
+  // Panels in der linken Hälfte behalten den absoluten Abstand zur linken Kante.
+  // Rund-Trip-stabil: rightGap = freeOldW - rect.x bleibt exakt erhalten.
+  const newX = relX >= 0.5
+    ? Math.max(0, freeNewW - (freeOldW - rect.x))
+    : Math.min(freeNewW, rect.x);
+  const newY = relY >= 0.5
+    ? Math.max(0, freeNewH - (freeOldH - rect.y))
+    : Math.min(freeNewH, rect.y);
+  return { ...rect, x: Math.round(newX), y: Math.round(newY) };
+}
+
+/**
+ * Liest die tatsächlich gerenderte Größe des #workspace-Elements via getBoundingClientRect.
+ * Kein Parameter, kein Flag, keine hartkodierte Konstante.
+ * Reagiert sofort auf CSS-Änderungen (z.B. body.presentation entfernt top/bottom-Offsets)
+ * weil getBoundingClientRect() einen synchronen Layout-Flush auslöst.
+ */
+function computeWsRectFromDOM() {
+  const wsEl = document.getElementById('workspace');
+  const r = wsEl.getBoundingClientRect();
+  return { x: 0, y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
+}
+
+/** Remappt alle Panels von oldWs auf state.wsRect und speichert das Layout. */
+function remapAllPanels(oldWs) {
+  if (!oldWs || oldWs.w <= 0 || oldWs.h <= 0 || state.panels.size === 0) return;
+  if (oldWs.w === state.wsRect.w && oldWs.h === state.wsRect.h) return; // No-op bei unveränderter Größe
+  for (const [, panel] of state.panels) {
+    panel.rect = remapPanelRect(panel.rect, panel.scale ?? state.panelScale, oldWs, state.wsRect);
+    applyDecoRect(panel);
+  }
+  saveLayout(state.panels, state.wsRect);
+}
+
+/**
+ * Zentraler Workspace-Resize-Handler, der ALLE Größenänderungen abdeckt:
+ * manuelles Resize, Maximize, Taskleisten-Restore, Vollbild.
+ * Wird als ResizeObserver auf #workspace registriert – feuert exakt nach dem
+ * Layout-Commit des Browsers mit den korrekten Maßen.
+ */
+function wireWorkspaceResizeObserver() {
+  const wsEl = document.getElementById('workspace');
+  let _rafId  = null;
+  const obs   = new ResizeObserver(() => {
+    if (_isRestoring) return; // Kein Remap während Session-Restore
+    if (_rafId) return;       // Throttle: max 1× pro Frame
+    _rafId = requestAnimationFrame(() => {
+      _rafId = null;
+      const oldRect  = { ...state.wsRect };
+      state.wsRect   = computeWsRectFromDOM();
+      positionSnapGuides();
+      remapAllPanels(oldRect);
+    });
+  });
+  obs.observe(wsEl);
+}
+
 async function init() {
-  state.wsRect = normalizeWsRect(await window.ss.getWorkspace());
+  state.wsRect = computeWsRectFromDOM();
   positionSnapGuides();
   // Startup-Hinweis wenn Google-API-Key fehlt (Push-Notifications funktionieren dann nicht).
   window.ss.keysLoad().then(k => {
@@ -74,6 +152,7 @@ async function init() {
   wireShortcuts();
   wireDesktopInteraction();
   wirePresentationHint();
+  wireWorkspaceResizeObserver();
   await restoreSession();
 }
 
@@ -117,7 +196,7 @@ async function restoreSession() {
     registerCustomDevice(def);
     addCustomChip(def);
   }
-  const saved = loadLayout();
+  const { ws: savedWs, panels: saved } = loadLayout();
   if (!saved.length) return;
 
   const restore = await new Promise(resolve => {
@@ -151,11 +230,14 @@ async function restoreSession() {
   try {
     for (const entry of saved) {
       const def = { id: entry.id, label: entry.label, w: entry.w, h: entry.h, frame: entry.frame ?? undefined };
-      await addPanel(def, { rect: entry.rect, scale: entry.scale, url: entry.url || '', skipSave: true });
+      const rect = savedWs
+        ? remapPanelRect(entry.rect, entry.scale ?? state.panelScale, savedWs, state.wsRect)
+        : entry.rect;
+      await addPanel(def, { rect, scale: entry.scale, url: entry.url || '', skipSave: true });
     }
   } finally {
     _isRestoring = false;
-    saveLayout(state.panels);
+    saveLayout(state.panels, state.wsRect);
   }
 
   if (saved.length && scaleSlider) {
@@ -482,17 +564,9 @@ function wireIpcEvents() {
     }
   });
 
-  window.ss.onWindowResize(async () => {
-    state.wsRect = normalizeWsRect(await window.ss.getWorkspace());
-    positionSnapGuides();
-    for (const [, panel] of state.panels) {
-      const c = clampRect(panel.rect, panel.scale);
-      if (c.x !== panel.rect.x || c.y !== panel.rect.y) {
-        panel.rect = c;
-        applyDecoRect(panel);
-      }
-    }
-  });
+  // Resize-Logik übernimmt wireWorkspaceResizeObserver() via ResizeObserver.
+  // onWindowResize bleibt als Hook erhalten, tut hier nichts mehr.
+  window.ss.onWindowResize(() => {});
 
   window.ss.onToggleSync(() => {
     if (syncCb) { syncCb.checked = !syncCb.checked; syncCb.dispatchEvent(new Event('change')); }
@@ -865,6 +939,44 @@ function wireDesktopInteraction() {
 
 let _presentationMode = false;
 let _hintHideTimer    = null;
+let _presentedPanelId = null;
+
+let _presentOverlay = null;
+
+function exitPanelPresent() {
+  if (_presentedPanelId === null) return;
+  const p = state.panels.get(_presentedPanelId);
+  if (p) {
+    p.decoEl.classList.remove('presenting');
+    applyDecoRect(p); // ursprüngliche Position/Scale wiederherstellen
+  }
+  _presentOverlay?.remove();
+  _presentOverlay = null;
+  document.body.classList.remove('panel-presenting');
+  _presentedPanelId = null;
+}
+
+window.addEventListener('ss:exit-present-panel', () => exitPanelPresent());
+
+window.addEventListener('ss:present-panel', e => {
+  const { id } = e.detail;
+  if (_presentedPanelId === id) return;
+  exitPanelPresent();
+  const p = state.panels.get(id);
+  if (!p) return;
+  _presentedPanelId = id;
+
+  // Overlay direkt in body – unter #workspace (z-index 9997), deckt #desktop-wv ab
+  _presentOverlay = document.createElement('div');
+  _presentOverlay.id = 'panel-present-overlay';
+  document.body.appendChild(_presentOverlay);
+
+  // CSS-Scale: Panel auf 100 % Viewport-Höhe skalieren (Webview-Auflösung bleibt unverändert)
+  const scaleToFit = window.innerHeight / p.rect.h;
+  p.decoEl.style.transform = `translate(-50%, -50%) scale(${scaleToFit})`;
+  p.decoEl.classList.add('presenting');
+  document.body.classList.add('panel-presenting');
+});
 
 function togglePresentation(force) {
   _presentationMode = (force !== undefined) ? !!force : !_presentationMode;
@@ -888,7 +1000,8 @@ function wireShortcuts() {
   document.getElementById('present-btn')?.addEventListener('click', () => togglePresentation());
 
   window.ss.onFullScreenChange(flag => {
-    if (flag === _presentationMode) return;
+    // wsRect + remap übernimmt der ResizeObserver automatisch wenn das DOM
+    // nach dem Vollbild-Wechsel seine Größe ändert.
     _presentationMode = flag;
     document.body.classList.toggle('presentation', flag);
     const presentBtn = document.getElementById('present-btn');
@@ -906,8 +1019,9 @@ function wireShortcuts() {
 
   document.addEventListener('keydown', e => {
     const ctrl = e.ctrlKey || e.metaKey;
-    if (e.key === 'F11')                     { e.preventDefault(); togglePresentation(); }
+    if (e.key === 'F11')                         { e.preventDefault(); togglePresentation(); }
     if (e.key === 'Escape' && _presentationMode) { e.preventDefault(); togglePresentation(false); }
+    if (e.key === 'Escape' && _presentedPanelId !== null) { e.preventDefault(); exitPanelPresent(); }
     if (ctrl && e.shiftKey && e.key === 'A') { e.preventDefault(); autoArrange(); }
     if (ctrl && e.key === 'p')               { e.preventDefault(); captureScreenshot(); }
     if (ctrl && e.shiftKey && e.key === 'S') {

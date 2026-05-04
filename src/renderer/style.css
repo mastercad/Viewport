@@ -841,6 +841,51 @@ body.presentation.hint-hidden #presentation-hint {
 /* Präsentationsbutton »aktiv«-Zustand */
 #present-btn.active { color: var(--accent); }
 
+/* HUD-Präsentieren-Button: Hover-Farbe passend zum Accent */
+.hud-btn.hud-present:hover { color: var(--accent); background: rgba(67,97,238,.18); }
+
+/* ── Panel-Vollbild-Präsentation ────────────────────────────── */
+/* Hauptansicht dimmen/blurren – liegt unter dem Overlay (z-index 1 < 9997) */
+body.panel-presenting #desktop-wv {
+  filter: blur(6px) brightness(0.35);
+  transition: filter 0.25s ease;
+}
+/* #workspace über das Overlay heben, damit die Panels sichtbar bleiben */
+body.panel-presenting #workspace {
+  z-index: 9998;
+}
+/* Nicht-präsentierende Panels einzeln dimmen (statt via Overlay) */
+body.panel-presenting .panel-deco:not(.presenting) {
+  filter: blur(4px) brightness(0.35);
+  opacity: 0.5;
+  pointer-events: none;
+  transition: filter 0.25s ease, opacity 0.25s ease;
+}
+
+/* Dunkles Overlay – direktes body-Kind zwischen desktop-wv und workspace */
+#panel-present-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 9997;
+  pointer-events: none;
+}
+
+/* Das präsentierende Panel: position:fixed → Root-Stacking-Context → z-index 9999 über allem */
+body.panel-presenting .panel-deco.presenting {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform-origin: center center !important;
+  z-index: 9999 !important;
+}
+/* Present-Modus: HUD immer oben am Viewport-Rand fixieren –
+   kein Spalt zwischen Trigger-Zone und HUD mehr */
+body.panel-presenting .panel-deco.presenting .panel-hud {
+  position: fixed !important;
+  top: 10px;
+}
+
 /* ── Snap-Linien ─────────────────────────────────────────────── */
 #snap-guides { position: fixed; inset: 0; pointer-events: none; z-index: 600; }
 

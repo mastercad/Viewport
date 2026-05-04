@@ -16,7 +16,7 @@ export const BUILTIN_TEMPLATES = [
 ];
 
 
-export function saveLayout(panelsMap) {
+export function saveLayout(panelsMap, wsRect) {
   const data = [];
   for (const [, p] of panelsMap) {
     const wv = p.decoEl?.querySelector('.panel-webview');
@@ -37,14 +37,20 @@ export function saveLayout(panelsMap) {
       url,
     });
   }
-  try { localStorage.setItem(LS_LAYOUT, JSON.stringify(data)); } catch { /* storage full */ }
+  const payload = { panels: data };
+  if (wsRect && wsRect.w > 0 && wsRect.h > 0) payload.ws = { w: wsRect.w, h: wsRect.h };
+  try { localStorage.setItem(LS_LAYOUT, JSON.stringify(payload)); } catch { /* storage full */ }
 }
 
 export function loadLayout() {
   try {
     const raw = localStorage.getItem(LS_LAYOUT);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
+    if (!raw) return { ws: null, panels: [] };
+    const parsed = JSON.parse(raw);
+    // Rückwärtskompatibilität: altes Format war ein reines Array
+    if (Array.isArray(parsed)) return { ws: null, panels: parsed };
+    return { ws: parsed.ws ?? null, panels: Array.isArray(parsed.panels) ? parsed.panels : [] };
+  } catch { return { ws: null, panels: [] }; }
 }
 
 
