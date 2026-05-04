@@ -1,6 +1,6 @@
 {
   "name": "blickfang",
-  "version": "1.0.2",
+  "version": "1.1.2",
   "description": "Webseiten auf Desktop, Tablet und Mobil gleichzeitig präsentieren – mit Screenshot-Editor und Annotationen",
   "main": "src/main.js",
   "scripts": {

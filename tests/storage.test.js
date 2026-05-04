@@ -48,12 +48,13 @@ function makePanel({ id = 'laptop', label = 'Laptop', w = 1366, h = 768,
 
 describe('loadLayout', () => {
   it('gibt leeres Array bei leerem Speicher zurück', () => {
-    expect(loadLayout()).toEqual([]);
+    expect(loadLayout().panels).toEqual([]);
+    expect(loadLayout().ws).toBeNull();
   });
 
   it('gibt leeres Array bei ungültigem JSON zurück', () => {
     mockStore['blickfang:layout'] = 'das ist kein json{';
-    expect(loadLayout()).toEqual([]);
+    expect(loadLayout().panels).toEqual([]);
   });
 });
 
@@ -62,7 +63,7 @@ describe('loadLayout', () => {
 describe('saveLayout + loadLayout', () => {
   it('gibt leeres Array für leere Panels-Map zurück', () => {
     saveLayout(new Map());
-    expect(loadLayout()).toEqual([]);
+    expect(loadLayout().panels).toEqual([]);
   });
 
   it('speichert Panel-Daten und lädt sie korrekt zurück', () => {
@@ -71,7 +72,7 @@ describe('saveLayout + loadLayout', () => {
     ]);
     saveLayout(panels);
 
-    const loaded = loadLayout();
+    const { panels: loaded } = loadLayout();
     expect(loaded).toHaveLength(1);
     expect(loaded[0].id).toBe('laptop');
     expect(loaded[0].label).toBe('Laptop');
@@ -88,7 +89,7 @@ describe('saveLayout + loadLayout', () => {
     ]);
     saveLayout(panels);
 
-    const loaded = loadLayout();
+    const { panels: loaded } = loadLayout();
     expect(loaded).toHaveLength(3);
     expect(loaded.map(p => p.id)).toContain('laptop');
     expect(loaded.map(p => p.id)).toContain('iphone');
@@ -106,7 +107,7 @@ describe('saveLayout + loadLayout', () => {
       }],
     ]);
     saveLayout(panels);
-    expect(loadLayout()[0].url).toBe('');
+    expect(loadLayout().panels[0].url).toBe('');
   });
 
   it('speichert frame-Eigenschaft korrekt', () => {
@@ -115,13 +116,13 @@ describe('saveLayout + loadLayout', () => {
       ['p', makePanel({ frame })],
     ]);
     saveLayout(panels);
-    expect(loadLayout()[0].frame).toEqual(frame);
+    expect(loadLayout().panels[0].frame).toEqual(frame);
   });
 
   it('überschreibt vorherige Speicherung beim erneuten Aufruf', () => {
     saveLayout(new Map([['p1', makePanel({ id: 'laptop', url: 'https://a.com' })]]));
     saveLayout(new Map([['p2', makePanel({ id: 'iphone', url: 'https://b.com', w: 390, h: 844 })]]));
-    const loaded = loadLayout();
+    const { panels: loaded } = loadLayout();
     expect(loaded).toHaveLength(1);
     expect(loaded[0].id).toBe('iphone');
   });
@@ -132,10 +133,10 @@ describe('saveLayout + loadLayout', () => {
 describe('clearLayout', () => {
   it('entfernt gespeichertes Layout aus dem Speicher', () => {
     saveLayout(new Map([['p', makePanel()]]));
-    expect(loadLayout()).toHaveLength(1);
+    expect(loadLayout().panels).toHaveLength(1);
 
     clearLayout();
-    expect(loadLayout()).toEqual([]);
+    expect(loadLayout().panels).toEqual([]);
     expect(mockStore['blickfang:layout']).toBeUndefined();
   });
 
