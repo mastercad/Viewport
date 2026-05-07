@@ -15,6 +15,7 @@
  *  D) overHud-Scoping    – eigenes HUD hält visible; fremdes HUD hat keinen Effekt
  *  E) Timer-Korrektheit  – kein Doppel-Timer, vorzeitiger Abbruch
  *  F) Cleanup            – _hudCleanup verhindert Show/Hide nach Aufruf
+ *  G) Differenzierter Hide-Delay – kurz nach HUD-Besuch, lang beim Übergang
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -26,10 +27,11 @@ const DIR = dirname(fileURLToPath(import.meta.url));
 const panelsSrc = readFileSync(join(DIR, '../src/renderer/panels.js'), 'utf8');
 
 // ── Konstanten (spiegeln panels.js) ──────────────────────────────────────────
-const FRAME_HEAD_H       = 36;
-const DWELL_SHOW         = 350;
-const DWELL_SHOW_PRESENT = 120;
-const DWELL_HIDE         = 200;
+const FRAME_HEAD_H        = 36;
+const DWELL_SHOW          = 350;
+const DWELL_SHOW_PRESENT  = 120;
+const DWELL_HIDE          = 600; // wenn Maus noch NIE auf HUD war (Übergang Frame→HUD)
+const DWELL_HIDE_FROM_HUD = 200; // wenn Maus bereits auf HUD war
 
 // ── Factory: baut dieselbe _hudMove-Closure wie panels.js ────────────────────
 //
@@ -38,6 +40,7 @@ const DWELL_HIDE         = 200;
 function buildHudHandler(el) {
   let _hudShowTimer = null;
   let _hudHideTimer = null;
+  let _wasOverHud   = false;
 
   const handler = e => {
     const presenting = el.classList.contains('presenting');
@@ -54,6 +57,7 @@ function buildHudHandler(el) {
     }
 
     if (inside) {
+      if (overHud) _wasOverHud = true;
       clearTimeout(_hudHideTimer);
       _hudHideTimer = null;
       if (!el.classList.contains('hud-visible') && !_hudShowTimer) {
@@ -67,10 +71,12 @@ function buildHudHandler(el) {
       clearTimeout(_hudShowTimer);
       _hudShowTimer = null;
       if (el.classList.contains('hud-visible') && !_hudHideTimer) {
+        const hideDelay = _wasOverHud ? DWELL_HIDE_FROM_HUD : DWELL_HIDE;
         _hudHideTimer = setTimeout(() => {
           _hudHideTimer = null;
+          _wasOverHud = false;
           el.classList.remove('hud-visible');
-        }, DWELL_HIDE);
+        }, hideDelay);
       }
     }
   };
@@ -123,8 +129,20 @@ describe('A) Quell-Invarianten – panels.js enthält erwartete Konstanten/Muste
     expect(panelsSrc).toContain('DWELL_SHOW_PRESENT = 120');
   });
 
-  it('enthält DWELL_HIDE = 200', () => {
-    expect(panelsSrc).toContain('DWELL_HIDE = 200');
+  it('enthält DWELL_HIDE = 600 (Übergangs-Delay)', () => {
+    expect(panelsSrc).toContain('DWELL_HIDE          = 600');
+  });
+
+  it('enthält DWELL_HIDE_FROM_HUD = 200 (kurzer Delay nach HUD-Besuch)', () => {
+    expect(panelsSrc).toContain('DWELL_HIDE_FROM_HUD = 200');
+  });
+
+  it('enthält _wasOverHud-Flag', () => {
+    expect(panelsSrc).toContain('_wasOverHud');
+  });
+
+  it('setzt _wasOverHud zurück wenn HUD ausgeblendet wird', () => {
+    expect(panelsSrc).toContain('_wasOverHud = false');
   });
 
   it('enthält Top-Edge-Trigger mit Grenzwert 64 im Present-Modus', () => {
@@ -228,17 +246,17 @@ describe('B) Normalmodus – Trigger-Zone, Show-/Hide-Delay', () => {
     expect(el.classList.contains('hud-visible')).toBe(true);
   });
 
-  // ── Hide-Delay: DWELL_HIDE = 200ms ───────────────────────────────────────
+  // ── Hide-Delay: DWELL_HIDE = 600ms (Maus war noch nicht auf HUD) ──────────
 
-  it('startet Hide-Timer wenn HUD sichtbar und Maus verlässt Zone', () => {
+  it('startet Hide-Timer wenn HUD sichtbar und Maus verlässt Zone (kein HUD-Besuch)', () => {
     el.classList.add('hud-visible');
-    handler(moveEvent(200, 500)); // außerhalb
+    handler(moveEvent(200, 500)); // außerhalb, _wasOverHud=false
     expect(el.classList.contains('hud-visible')).toBe(true); // noch nicht weg
     vi.advanceTimersByTime(DWELL_HIDE);
     expect(el.classList.contains('hud-visible')).toBe(false);
   });
 
-  it('versteckt HUD nicht vor Ablauf des Hide-Delays (199ms)', () => {
+  it('versteckt HUD nicht vor Ablauf des Hide-Delays (599ms, kein HUD-Besuch)', () => {
     el.classList.add('hud-visible');
     handler(moveEvent(200, 500));
     vi.advanceTimersByTime(DWELL_HIDE - 1);
@@ -490,5 +508,104 @@ describe('F) Cleanup – _hudCleanup verhindert Show/Hide nach Aufruf', () => {
   it('ist idempotent – doppelter cleanup-Aufruf wirft keinen Fehler', () => {
     handler(moveEvent(200, 210));
     expect(() => { cleanup(); cleanup(); }).not.toThrow();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G) Differenzierter Hide-Delay – kurz nach HUD-Besuch, lang beim Übergang
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('G) Differenzierter Hide-Delay – _wasOverHud', () => {
+  let el, hud, handler, cleanup;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    ({ el, hud } = makePanel({ left: 100, top: 200, right: 400, bottom: 600 }));
+    ({ handler, cleanup } = buildHudHandler(el));
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    document.body.innerHTML = '';
+  });
+
+  it('verwendet DWELL_HIDE_FROM_HUD wenn Maus zuvor auf HUD war', () => {
+    // 1. HUD einblenden
+    handler(moveEvent(200, 210));
+    vi.advanceTimersByTime(DWELL_SHOW);
+    expect(el.classList.contains('hud-visible')).toBe(true);
+
+    // 2. Maus auf HUD → _wasOverHud = true
+    handler(moveEvent(200, 500, hud));
+    expect(el.classList.contains('hud-visible')).toBe(true);
+
+    // 3. Maus verlässt Panel komplett
+    handler(moveEvent(50, 50));
+
+    // Nach DWELL_HIDE_FROM_HUD (200ms) muss HUD weg sein
+    vi.advanceTimersByTime(DWELL_HIDE_FROM_HUD);
+    expect(el.classList.contains('hud-visible')).toBe(false);
+  });
+
+  it('versteckt HUD nicht vor DWELL_HIDE_FROM_HUD wenn Maus auf HUD war (199ms)', () => {
+    handler(moveEvent(200, 210));
+    vi.advanceTimersByTime(DWELL_SHOW);
+
+    handler(moveEvent(200, 500, hud)); // _wasOverHud = true
+    handler(moveEvent(50, 50));        // verlässt
+
+    vi.advanceTimersByTime(DWELL_HIDE_FROM_HUD - 1);
+    expect(el.classList.contains('hud-visible')).toBe(true);
+  });
+
+  it('verwendet langen DWELL_HIDE wenn Maus nie auf HUD war', () => {
+    handler(moveEvent(200, 210));
+    vi.advanceTimersByTime(DWELL_SHOW);
+    expect(el.classList.contains('hud-visible')).toBe(true);
+
+    // Verlässt Zone ohne je auf HUD gewesen zu sein
+    handler(moveEvent(50, 50));
+
+    // Nach DWELL_HIDE_FROM_HUD noch sichtbar (langer Delay läuft)
+    vi.advanceTimersByTime(DWELL_HIDE_FROM_HUD);
+    expect(el.classList.contains('hud-visible')).toBe(true);
+
+    // Nach vollem DWELL_HIDE dann weg
+    vi.advanceTimersByTime(DWELL_HIDE - DWELL_HIDE_FROM_HUD);
+    expect(el.classList.contains('hud-visible')).toBe(false);
+  });
+
+  it('setzt _wasOverHud zurück wenn HUD ausgeblendet wird', () => {
+    // Erste Runde: auf HUD → weg → HUD verschwindet nach DWELL_HIDE_FROM_HUD
+    handler(moveEvent(200, 210));
+    vi.advanceTimersByTime(DWELL_SHOW);
+    handler(moveEvent(200, 500, hud)); // _wasOverHud = true
+    handler(moveEvent(50, 50));
+    vi.advanceTimersByTime(DWELL_HIDE_FROM_HUD);
+    expect(el.classList.contains('hud-visible')).toBe(false);
+
+    // Zweite Runde: HUD wieder einblenden, diesmal OHNE HUD-Besuch
+    handler(moveEvent(200, 210));
+    vi.advanceTimersByTime(DWELL_SHOW);
+    handler(moveEvent(50, 50)); // verlässt – _wasOverHud müsste false sein
+
+    vi.advanceTimersByTime(DWELL_HIDE_FROM_HUD);
+    expect(el.classList.contains('hud-visible')).toBe(true); // noch sichtbar (langer Delay)
+
+    vi.advanceTimersByTime(DWELL_HIDE - DWELL_HIDE_FROM_HUD);
+    expect(el.classList.contains('hud-visible')).toBe(false);
+  });
+
+  it('bricht kurzen Hide-Timer ab wenn Maus in Frame-Zone zurückkehrt', () => {
+    handler(moveEvent(200, 210));
+    vi.advanceTimersByTime(DWELL_SHOW);
+    handler(moveEvent(200, 500, hud)); // _wasOverHud = true
+    handler(moveEvent(50, 50));        // kurzer Hide-Timer (200ms)
+
+    vi.advanceTimersByTime(DWELL_HIDE_FROM_HUD - 50); // 150ms – Timer läuft noch
+    handler(moveEvent(200, 210));                      // zurück in Zone → abbrechen
+    vi.advanceTimersByTime(200);
+    expect(el.classList.contains('hud-visible')).toBe(true);
   });
 });

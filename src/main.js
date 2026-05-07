@@ -131,10 +131,13 @@ function createMainWindow() {
   });
 
   mainWin.on('enter-full-screen', () => {
+    // Windows: Taskleiste hat HWND_TOPMOST-Status; ohne alwaysOnTop bleibt sie sichtbar.
+    if (process.platform === 'win32') mainWin?.setAlwaysOnTop(true, 'screen-saver');
     mainWin?.webContents.send('window:fullscreen', true);
     globalShortcut.register('Escape', exitFullScreen); // nur im Vollbild, sonst stört Escape
   });
   mainWin.on('leave-full-screen', () => {
+    if (process.platform === 'win32') mainWin?.setAlwaysOnTop(false);
     globalShortcut.unregister('Escape');
     mainWin?.webContents.send('window:fullscreen', false);
   });

@@ -1,5 +1,5 @@
 import { PRESETS, DEVICE_UA, SNAP_THRESH, FRAME_HEAD_H, MIN_W, MIN_H } from './constants.js';
-import { state, clampRect, applyDecoRect }                  from './state.js';
+import { state, clampRect, applyDecoRect, computeScaleRect } from './state.js';
 import { toast }                                              from './utils.js';
 import { saveLayout }                                         from './storage.js';
 import { navigateWvLogic }                                   from './navLogic.js';
@@ -24,6 +24,48 @@ const sgCh = document.getElementById('sg-ch');
 const sgB  = document.getElementById('sg-b');
 
 let _stackOrder = [];
+
+// Frame-Protection: Verhindert, dass Klicks auf den Geräterahmen oder die
+// Naht zwischen Frame und Content-Area an darunterliegende Webviews
+// (desktop-wv, andere Panel-Webviews) durchfallen.
+// CSS pointer-events reicht dafür in Electron nicht aus, weil <webview>-
+// Elemente als OOPIFs auf Compositor-Ebene eigene Hit-Tests durchführen.
+// Lösung: Beim mousemove prüfen ob die Maus im Frame-Bereich eines Panels
+// liegt. Wenn ja, alle Webviews auf pointer-events:none setzen, bevor der
+// Click feuern kann. Beim Verlassen des Frame-Bereichs wiederherstellen.
+const _desktopWv = document.getElementById('desktop-wv');
+let _frameProtActive = false;
+function _setFrameProtection(active) {
+  if (_frameProtActive === active) return;
+  _frameProtActive = active;
+  const pe = active ? 'none' : '';
+  if (_desktopWv) _desktopWv.style.pointerEvents = pe;
+  for (const p of state.panels.values()) {
+    const wv = p.decoEl?.querySelector('.panel-webview');
+    if (wv) wv.style.pointerEvents = pe;
+  }
+}
+document.addEventListener('mousemove', e => {
+  // Während Drag/Resize verwalten diese Operationen pointer-events selbst.
+  if (drag || rsz) return;
+  const { clientX: cx, clientY: cy } = e;
+  let inFrame = false;
+  for (const p of state.panels.values()) {
+    const r = p.decoEl.getBoundingClientRect();
+    if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) continue;
+    // Maus ist innerhalb des Panel-Äußeren. Prüfen ob im Viewport (Content).
+    const vpEl = p.decoEl.querySelector('.panel-viewport');
+    if (vpEl) {
+      const vr = vpEl.getBoundingClientRect();
+      if (cx >= vr.left && cx <= vr.right && cy >= vr.top && cy <= vr.bottom) continue;
+    }
+    // Innerhalb des Panels aber außerhalb des Viewports → Frame-Bereich.
+    inFrame = true;
+    break;
+  }
+  _setFrameProtection(inFrame);
+}, { passive: true });
+document.addEventListener('mouseleave', () => _setFrameProtection(false));
 
 let _navSaveTimer = null;
 function scheduleNavSave() {
@@ -97,21 +139,45 @@ function clearSnapGuides() {
 
 export async function addPanel(def, opts = {}) {
   const scale = opts.scale ?? state.panelScale;
-  const rect  = opts.rect ? clampRect(opts.rect, scale) : calcInitialRect(def);
+  // Defensive copy: verhindert, dass rotatePanel das globale PRESETS-Objekt
+  // oder den custom-Registry-Eintrag mutiert (def.w, def.h, def.frame).
+  const ownDef = { ...def, frame: def.frame ? { ...def.frame } : def.frame };
+
+  // Basismaße (Portrait) einmalig sichern – def.w/h/frame werden NIEMALS verändert.
+  if (ownDef._baseW === undefined) {
+    ownDef._baseW     = ownDef.w;
+    ownDef._baseH     = ownDef.h;
+    ownDef._baseFrame = ownDef.frame ? { ...ownDef.frame } : null;
+  }
+
+  const rect  = opts.rect ? clampRect(opts.rect, scale) : calcInitialRect(ownDef);
   const id    = String(++_panelCounter);
   const url   = opts.url   ?? document.getElementById('url-input').value.trim();
-  const decoEl = createDecoEl(id, def, scale);
-  state.panels.set(id, { def, rect, scale, decoEl });
+  const decoEl = createDecoEl(id, ownDef, scale);
+
+  // Bei Landscape-Wiederherstellung: CSS-Variablen auf Landscape-Werte setzen
+  if (ownDef._landscape && ownDef._baseFrame) {
+    const { t = 0, r = 0, b = 0, l = 0 } = ownDef._baseFrame;
+    decoEl.style.setProperty('--ft', l + 'px');
+    decoEl.style.setProperty('--fb', r + 'px');
+    decoEl.style.setProperty('--fl', b + 'px');
+    decoEl.style.setProperty('--fr', t + 'px');
+  }
+
+  state.panels.set(id, { def: ownDef, rect, scale, decoEl });
   workspace.appendChild(decoEl);
   applyDecoRect({ rect, decoEl, scale });
   bringToFront(id);
   const wv = decoEl.querySelector('.panel-webview');
   if (wv) {
-    const { mobile, ua } = getDeviceEmulationOpts(def);
+    const { mobile, ua } = getDeviceEmulationOpts(ownDef);
     // Listener vor src setzen – kein Race-Condition-Risiko.
     // dom-ready fired für die geladene Seite, nicht für about:blank.
     wv.addEventListener('dom-ready', () => {
-      window.ss.setViewport(wv.getWebContentsId(), def.w, def.h, { mobile, ua });
+      // Effektive Dims (landscape oder portrait) aus Basiswerten ableiten
+      const vw = ownDef._landscape ? ownDef._baseH : ownDef._baseW;
+      const vh = ownDef._landscape ? ownDef._baseW : ownDef._baseH;
+      window.ss.setViewport(wv.getWebContentsId(), vw, vh, { mobile, ua });
     }, { once: true });
     if (mobile) {
       wv.addEventListener('did-finish-load', () => {
@@ -177,16 +243,24 @@ function calcInitialRect(def) {
   const { wsRect, panels } = state;
   const fw = (def.frame?.l ?? 0) + (def.frame?.r ?? 0);
   const fh = (def.frame?.t ?? 0) + (def.frame?.b ?? 0);
-  const w  = Math.min(def.w + fw, wsRect.w - 40);
-  const h  = Math.min(def.h + FRAME_HEAD_H + fh, wsRect.h - 40);
+  const s  = Math.min(state.panelScale, 1);
+  // Logische Dimensionen nicht an die Workspace-Größe klemmen:
+  // CSS scale() verkleinert das Panel visuell – rect.w/h sind die
+  // Originaldimensionen. Würden sie hier gestutzt, stimmen sie nach
+  // der ersten Rotation nicht mehr mit rotatePanel() überein.
+  const w  = def.w + fw;
+  const h  = def.h + FRAME_HEAD_H + fh;
+  // Visuelle Größe: steuert ausschließlich die Positionsberechnung.
+  const vw = w * s;
+  const vh = h * s;
   const STEP  = FRAME_HEAD_H + 6;
-  const maxSt = Math.max(1, Math.floor((wsRect.h - h - 20) / STEP));
+  const maxSt = Math.max(1, Math.floor((wsRect.h - vh - 20) / STEP));
   const step  = panels.size % maxSt;
   const col   = Math.floor(panels.size / maxSt);
   const colW  = Math.min(200, Math.floor(wsRect.w / 5));
   return {
-    x: Math.min(col * colW + step * 4 + 16, wsRect.w - w - 16),
-    y: Math.min(step * STEP + 16,            wsRect.h - h - 16),
+    x: Math.min(col * colW + step * 4 + 16, Math.max(0, wsRect.w - vw - 16)),
+    y: Math.min(step * STEP + 16,            Math.max(0, wsRect.h - vh - 16)),
     w, h,
   };
 }
@@ -258,32 +332,45 @@ export function rotatePanel(id) {
   if (!p) return;
   const { def } = p;
 
-  // Breite und Höhe tauschen
-  [def.w, def.h] = [def.h, def.w];
+  // Basismaße (Portrait) einmalig sichern – def.w/h/frame werden NIEMALS verändert.
+  if (def._baseW === undefined) {
+    def._baseW     = def.w;
+    def._baseH     = def.h;
+    def._baseFrame = def.frame ? { ...def.frame } : null;
+  }
 
-  // Frame-Werte rotieren (90°: oben→rechts, rechts→unten, unten→links, links→oben)
-  if (def.frame) {
-    const { t = 0, r = 0, b = 0, l = 0 } = def.frame;
-    def.frame = { t: l, r: t, b: r, l: b };
+  def._landscape = !def._landscape;
+
+  // Effektive Maße aus Basiswerten ableiten: X wird Y, Y wird X
+  const w = def._landscape ? def._baseH : def._baseW;
+  const h = def._landscape ? def._baseW : def._baseH;
+  let frame = null;
+  if (def._baseFrame) {
+    if (def._landscape) {
+      const { t = 0, r = 0, b = 0, l = 0 } = def._baseFrame;
+      frame = { t: l, r: t, b: r, l: b };
+    } else {
+      frame = { ...def._baseFrame };
+    }
   }
 
   // CSS-Variablen für Frame aktualisieren
   const { decoEl } = p;
-  decoEl.style.setProperty('--ft', (def.frame?.t ?? 0) + 'px');
-  decoEl.style.setProperty('--fb', (def.frame?.b ?? 0) + 'px');
-  decoEl.style.setProperty('--fl', (def.frame?.l ?? 0) + 'px');
-  decoEl.style.setProperty('--fr', (def.frame?.r ?? 0) + 'px');
+  decoEl.style.setProperty('--ft', (frame?.t ?? 0) + 'px');
+  decoEl.style.setProperty('--fb', (frame?.b ?? 0) + 'px');
+  decoEl.style.setProperty('--fl', (frame?.l ?? 0) + 'px');
+  decoEl.style.setProperty('--fr', (frame?.r ?? 0) + 'px');
 
   // Rect neu berechnen (Position beibehalten)
-  const fw = (def.frame?.l ?? 0) + (def.frame?.r ?? 0);
-  const fh = (def.frame?.t ?? 0) + (def.frame?.b ?? 0);
-  p.rect = { ...p.rect, w: def.w + fw, h: def.h + FRAME_HEAD_H + fh };
+  const fw = (frame?.l ?? 0) + (frame?.r ?? 0);
+  const fh = (frame?.t ?? 0) + (frame?.b ?? 0);
+  p.rect = { ...p.rect, w: w + fw, h: h + FRAME_HEAD_H + fh };
 
   // Viewport-Emulation aktualisieren
   const wv = decoEl.querySelector('.panel-webview');
   if (wv) {
     const { mobile, ua } = getDeviceEmulationOpts(def);
-    window.ss.setViewport(wv.getWebContentsId(), def.w, def.h, { mobile, ua });
+    window.ss.setViewport(wv.getWebContentsId(), w, h, { mobile, ua });
   }
 
   applyDecoRect(p);
@@ -409,6 +496,9 @@ function onDragEnd() {
       setTimeout(clearSnapGuides, 600);
     }
   }
+  // Nach Drag: Skalierungs-Anker zurücksetzen, damit künftiges Scale
+  // von der neuen (gezogenen) Position ausgeht.
+  if (pp) { pp.naturalX = null; pp.naturalY = null; }
   for (const p of state.panels.values()) applyDecoRect(p);
   document.querySelectorAll('webview').forEach(wv => { wv.style.pointerEvents = ''; });
   saveLayout(state.panels, state.wsRect);
@@ -733,7 +823,12 @@ function createDecoEl(id, def, _scale = state.panelScale) {
       }
       case 'scale-': {
         if (p) {
-          p.scale = Math.max(0.15, (p.scale ?? state.panelScale) - 0.1);
+          const newS = Math.max(0.15, (p.scale ?? state.panelScale) - 0.1);
+          const r = computeScaleRect(p, newS);
+          p.scale    = newS;
+          p.rect     = r.rect;
+          p.naturalX = r.naturalX;
+          p.naturalY = r.naturalY;
           applyDecoRect(p);
           saveLayout(state.panels, state.wsRect);
         }
@@ -741,7 +836,12 @@ function createDecoEl(id, def, _scale = state.panelScale) {
       }
       case 'scale+': {
         if (p) {
-          p.scale = Math.min(2.0, (p.scale ?? state.panelScale) + 0.1);
+          const newS = Math.min(2.0, (p.scale ?? state.panelScale) + 0.1);
+          const r = computeScaleRect(p, newS);
+          p.scale    = newS;
+          p.rect     = r.rect;
+          p.naturalX = r.naturalX;
+          p.naturalY = r.naturalY;
           applyDecoRect(p);
           saveLayout(state.panels, state.wsRect);
         }
@@ -761,14 +861,21 @@ function createDecoEl(id, def, _scale = state.panelScale) {
 
   const DWELL_SHOW = 350;
   const DWELL_SHOW_PRESENT = 120;
-  const DWELL_HIDE = 200;
+  const DWELL_HIDE          = 600; // Übergangszeit Frame → Toolbar (Maus war noch nicht auf HUD)
+  const DWELL_HIDE_FROM_HUD = 200; // kurzer Delay wenn Maus bereits auf Toolbar war
   let _hudShowTimer = null;
   let _hudHideTimer = null;
+  let _wasOverHud   = false; // war die Maus zuletzt direkt über der Toolbar?
 
   const _hudMove = e => {
     const presenting = el.classList.contains('presenting');
-    // Maus über dem HUD dieses Panels → immer sichtbar halten
-    const overHud = el.contains(e.target) && !!e.target.closest('.panel-hud');
+    // Maus über dem HUD dieses Panels → immer sichtbar halten (auch per Rect,
+    // da mousemove.target durch Webviews blockiert sein kann)
+    const hudEl = el.querySelector('.panel-hud');
+    const overHud = (el.contains(e.target) && !!e.target.closest('.panel-hud')) ||
+                    (hudEl && (() => { const h = hudEl.getBoundingClientRect();
+                      return e.clientX >= h.left && e.clientX <= h.right &&
+                             e.clientY >= h.top  && e.clientY <= h.bottom; })());
     let inside;
     if (overHud) {
       inside = true;
@@ -777,13 +884,14 @@ function createDecoEl(id, def, _scale = state.panelScale) {
       // Trigger-Zone deckt den Bereich sicher ab.
       inside = e.clientY <= 64;
     } else {
-      // Normal-Modus: nur Frame-Kopf-Zone auslösen
+      // Normal-Modus: Frame-Kopf-Zone auslösen
       const r = el.getBoundingClientRect();
       inside = e.clientX >= r.left && e.clientX <= r.right &&
                e.clientY >= r.top  && e.clientY <= r.top + FRAME_HEAD_H;
     }
 
     if (inside) {
+      if (overHud) _wasOverHud = true;
       clearTimeout(_hudHideTimer);
       _hudHideTimer = null;
       if (!el.classList.contains('hud-visible') && !_hudShowTimer) {
@@ -797,10 +905,12 @@ function createDecoEl(id, def, _scale = state.panelScale) {
       clearTimeout(_hudShowTimer);
       _hudShowTimer = null;
       if (el.classList.contains('hud-visible') && !_hudHideTimer) {
+        const hideDelay = _wasOverHud ? DWELL_HIDE_FROM_HUD : DWELL_HIDE;
         _hudHideTimer = setTimeout(() => {
           _hudHideTimer = null;
+          _wasOverHud = false;
           el.classList.remove('hud-visible');
-        }, DWELL_HIDE);
+        }, hideDelay);
       }
     }
   };

@@ -37,7 +37,7 @@ function desktopNavigateSmart(url) {
 
   if (sameOrigin) {
     if (!_desktopReady) {
-      desktopWv.loadURL(url);
+      desktopWv.loadURL(url).catch(() => {});
       return;
     }
     const { pathname, search, hash } = new URL(url);
@@ -46,9 +46,9 @@ function desktopNavigateSmart(url) {
       `  history.pushState(null,'',${JSON.stringify(pathname + search + hash)});` +
       `  window.dispatchEvent(new PopStateEvent('popstate',{state:null}));` +
       `})()`,
-    ).catch(() => desktopWv.loadURL(url));
+    ).catch(() => desktopWv.loadURL(url).catch(() => {}));
   } else {
-    desktopWv.loadURL(url);
+    desktopWv.loadURL(url).catch(() => {});
   }
 }
 
@@ -229,7 +229,7 @@ async function restoreSession() {
   _isRestoring = true;
   try {
     for (const entry of saved) {
-      const def = { id: entry.id, label: entry.label, w: entry.w, h: entry.h, frame: entry.frame ?? undefined };
+      const def = { id: entry.id, label: entry.label, w: entry.w, h: entry.h, frame: entry.frame ?? undefined, _landscape: entry.landscape ?? false };
       const rect = savedWs
         ? remapPanelRect(entry.rect, entry.scale ?? state.panelScale, savedWs, state.wsRect)
         : entry.rect;

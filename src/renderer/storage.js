@@ -27,13 +27,14 @@ export function saveLayout(panelsMap, wsRect) {
     } catch { /* ignore */ }
     if (url === 'about:blank') url = '';
     data.push({
-      id:    p.def.id,
-      label: p.def.label,
-      w:     p.def.w,
-      h:     p.def.h,
-      frame: p.def.frame ?? null,
-      rect:  { ...p.rect },
-      scale: p.scale,
+      id:        p.def.id,
+      label:     p.def.label,
+      w:         p.def.w,
+      h:         p.def.h,
+      frame:     p.def.frame ?? null,
+      landscape: p.def._landscape ?? false,
+      rect:      { ...p.rect },
+      scale:     p.scale,
       url,
     });
   }
