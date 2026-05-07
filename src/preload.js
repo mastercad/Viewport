@@ -14,8 +14,9 @@ contextBridge.exposeInMainWorld('ss', {
   captureWv:        (wvId)  => ipcRenderer.invoke('screenshot:capture-wv', wvId),
   captureDesktopWv: (wvId)  => ipcRenderer.invoke('screenshot:capture-desktop-wv', wvId),
 
-  setFullScreen:    (flag) => ipcRenderer.invoke('window:setFullScreen', flag),
-  onFullScreenChange: (cb) => ipcRenderer.on('window:fullscreen', (_e, flag) => cb(flag)),
+  setFullScreen:      (flag) => ipcRenderer.invoke('window:setFullScreen', flag),
+  onFullScreenChange:  (cb) => ipcRenderer.on('window:fullscreen',    (_e, flag) => cb(flag)),
+  onExitRequest:       (cb) => ipcRenderer.on('window:exit-request',  () => cb()),
 
   onWindowResize:   (cb) => ipcRenderer.on('window:resized',      () => cb()),
   onToggleSync:     (cb) => ipcRenderer.on('toggle:sync',         () => cb()),
@@ -48,4 +49,7 @@ contextBridge.exposeInMainWorld('ss', {
 
   // Öffnet einen Link im System-Standardbrowser (nur https / mailto).
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+
+  // Liefert die App-Versionsnummer aus package.json.
+  appVersion: () => ipcRenderer.invoke('app:version'),
 });

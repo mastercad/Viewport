@@ -129,6 +129,15 @@ function wireWorkspaceResizeObserver() {
       state.wsRect   = computeWsRectFromDOM();
       positionSnapGuides();
       remapAllPanels(oldRect);
+      // Presenting-Panel nach Vollbild-/Größen-Wechsel neu skalieren.
+      // Der ResizeObserver feuert NACH dem Layout-Commit → window.innerHeight ist korrekt.
+      if (_presentedPanelId !== null) {
+        const p = state.panels.get(_presentedPanelId);
+        if (p) {
+          const scaleToFit = window.innerHeight / p.rect.h;
+          p.decoEl.style.transform = `translate(-50%, -50%) scale(${scaleToFit})`;
+        }
+      }
     });
   });
   obs.observe(wsEl);
@@ -1003,6 +1012,13 @@ function togglePresentation(force) {
 function wireShortcuts() {
   document.getElementById('present-btn')?.addEventListener('click', () => togglePresentation());
 
+  // Escape / F11 kommen als globale Shortcuts aus dem Main-Prozess
+  // (globalShortcut fängt sie vor dem Renderer ab – keydown nie erreicht).
+  window.ss.onExitRequest(() => {
+    if (_presentedPanelId !== null) exitPanelPresent();
+    else if (_presentationMode)     togglePresentation(false);
+  });
+
   window.ss.onFullScreenChange(flag => {
     // wsRect + remap übernimmt der ResizeObserver automatisch wenn das DOM
     // nach dem Vollbild-Wechsel seine Größe ändert.
@@ -1023,9 +1039,14 @@ function wireShortcuts() {
 
   document.addEventListener('keydown', e => {
     const ctrl = e.ctrlKey || e.metaKey;
-    if (e.key === 'F11')                         { e.preventDefault(); togglePresentation(); }
-    if (e.key === 'Escape' && _presentationMode) { e.preventDefault(); togglePresentation(false); }
-    if (e.key === 'Escape' && _presentedPanelId !== null) { e.preventDefault(); exitPanelPresent(); }
+    if (e.key === 'F11') {
+      e.preventDefault();
+      if (_presentedPanelId !== null) exitPanelPresent(); else togglePresentation();
+    }
+    if (e.key === 'Escape') {
+      if (_presentedPanelId !== null) { e.preventDefault(); exitPanelPresent(); }
+      else if (_presentationMode)     { e.preventDefault(); togglePresentation(false); }
+    }
     if (ctrl && e.shiftKey && e.key === 'A') { e.preventDefault(); autoArrange(); }
     if (ctrl && e.key === 'p')               { e.preventDefault(); captureScreenshot(); }
     if (ctrl && e.shiftKey && e.key === 'S') {
@@ -1109,10 +1130,13 @@ wireUpdater();
 
 /* ── About-Dialog ──────────────────────────────────────────────────── */
 (function wireAbout() {
-  const dlg   = document.getElementById('about-dialog');
-  const btn   = document.getElementById('about-btn');
-  const close = document.getElementById('about-close');
+  const dlg     = document.getElementById('about-dialog');
+  const btn     = document.getElementById('about-btn');
+  const close   = document.getElementById('about-close');
+  const verSpan = document.getElementById('about-version');
   if (!dlg || !btn) return;
+
+  window.ss.appVersion?.().then(v => { if (verSpan) verSpan.textContent = `Version ${v}`; });
 
   btn.addEventListener('click', () => dlg.showModal());
   close.addEventListener('click', () => dlg.close());
