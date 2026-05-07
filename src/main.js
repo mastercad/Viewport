@@ -23,6 +23,36 @@ if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 }
 
 let mainWin = null;
+
+// Auf Windows ist setFullScreen() nur ein erweitertes Maximize – die Taskleiste
+// bleibt sichtbar. Kiosk-Modus deckt den gesamten Bildschirm ab (inkl. Taskbar).
+function winIsFullScreen() {
+  if (!mainWin) return false;
+  return process.platform === 'win32' ? mainWin.isKiosk() : mainWin.isFullScreen();
+}
+function winEnterFullScreen() {
+  if (!mainWin) return;
+  if (process.platform === 'win32') {
+    mainWin.setKiosk(true);
+    mainWin.webContents.send('window:fullscreen', true);
+    globalShortcut.register('Escape', exitFullScreen);
+  } else {
+    mainWin.setFullScreen(true);
+    // enter-full-screen event schickt das IPC und registriert Escape
+  }
+}
+function winExitFullScreen() {
+  if (!mainWin) return;
+  if (process.platform === 'win32') {
+    mainWin.setKiosk(false);
+    globalShortcut.unregister('Escape');
+    mainWin.webContents.send('window:fullscreen', false);
+  } else {
+    mainWin.setFullScreen(false);
+    // leave-full-screen event schickt das IPC und deregistriert Escape
+  }
+}
+
 app.whenReady().then(() => {
   setupSession(session.fromPartition('persist:desktop', { cache: true }));
   initPushBridge();
@@ -127,25 +157,20 @@ function createMainWindow() {
 
   globalShortcut.register('F11', () => {
     if (!mainWin) return;
-    if (mainWin.isFullScreen()) {
+    if (winIsFullScreen()) {
       // Renderer entscheidet: Panel-Präsentation beenden oder nur Vollbild verlassen
       mainWin.webContents.send('window:exit-request');
     } else {
-      if (process.platform === 'win32') {
-        mainWin.setAlwaysOnTop(true, 'screen-saver');
-        mainWin.setFullScreen(true);
-      } else {
-        mainWin.setFullScreen(true);
-      }
+      winEnterFullScreen();
     }
   });
 
+  // enter-full-screen / leave-full-screen feuern nur auf macOS/Linux (kein kiosk).
   mainWin.on('enter-full-screen', () => {
     mainWin?.webContents.send('window:fullscreen', true);
     globalShortcut.register('Escape', exitFullScreen);
   });
   mainWin.on('leave-full-screen', () => {
-    if (process.platform === 'win32') mainWin?.setAlwaysOnTop(false);
     globalShortcut.unregister('Escape');
     mainWin?.webContents.send('window:fullscreen', false);
   });
@@ -233,7 +258,7 @@ ipcMain.handle('panel:setViewport', async (_e, { wvId, w, h, mobile, ua }) => {
 ipcMain.handle('workspace:getBounds', () => {
   if (!mainWin) return null;
   const [winW, winH] = mainWin.getContentSize();
-  const fullscreen    = mainWin.isFullScreen();
+  const fullscreen    = winIsFullScreen();
   const topOffset     = fullscreen ? 0 : 110;  // header 60 + device-bar 50
   const bottomOffset  = fullscreen ? 0 : 60;   // toolbar
   return { x: 0, y: topOffset, width: winW, height: winH - topOffset - bottomOffset };
@@ -264,7 +289,7 @@ ipcMain.handle('screenshot:capture-desktop-wv', async (_e, wvId) => {
   const wc = webContents.fromId(wvId);
   if (!wc || wc.isDestroyed() || !mainWin) return null;
   const [winW, winH] = mainWin.getContentSize();
-  const fullscreen   = mainWin.isFullScreen();
+  const fullscreen   = winIsFullScreen();
   const topOffset    = fullscreen ? 0 : 110;  // header 60 + device-bar 50
   const botOffset    = fullscreen ? 0 : 60;   // toolbar
   const captureH     = winH - topOffset;       // Workspace + Toolbar (= was der Benutzer sieht)
@@ -289,18 +314,8 @@ ipcMain.handle('screenshot:capture-desktop-wv', async (_e, wvId) => {
 
 ipcMain.handle('window:setFullScreen', (_e, flag) => {
   if (!mainWin) return;
-  if (process.platform === 'win32') {
-    // Gleiche Reihenfolge wie F11: alwaysOnTop VOR setFullScreen setzen.
-    if (flag) {
-      mainWin.setAlwaysOnTop(true, 'screen-saver');
-      mainWin.setFullScreen(true);
-    } else {
-      mainWin.setAlwaysOnTop(false);
-      mainWin.setFullScreen(false);
-    }
-  } else {
-    mainWin.setFullScreen(!!flag);
-  }
+  if (flag) winEnterFullScreen();
+  else       winExitFullScreen();
 });
 
 ipcMain.on('updater:install', () => {
