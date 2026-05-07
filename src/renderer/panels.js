@@ -211,6 +211,10 @@ export async function addPanel(def, opts = {}) {
 export function removePanel(id) {
   const p = state.panels.get(id);
   if (!p) return;
+  // Panel im Present-Modus? Overlay + Vollbild zuerst beenden, bevor das Element entfernt wird.
+  if (p.decoEl.classList.contains('presenting')) {
+    window.dispatchEvent(new CustomEvent('ss:exit-present-panel'));
+  }
   maybeExitFocusOnRemove(id);
   if (p.decoEl._hudCleanup) p.decoEl._hudCleanup();
   if (p.decoEl._hudMoveHandler) {
@@ -855,7 +859,13 @@ function createDecoEl(id, def, _scale = state.panelScale) {
           window.dispatchEvent(new CustomEvent('ss:present-panel', { detail: { id } }));
         }
         break;
-      case 'close': removePanel(id); break;
+      case 'close':
+        if (el.classList.contains('presenting')) {
+          // Im Vollbild-Modus ist der Schließen-Button irreführend – explizit bestätigen.
+          if (!window.confirm('Geräteansicht wirklich schließen und den Vollbild-Modus beenden?')) break;
+        }
+        removePanel(id);
+        break;
     }
   });
 

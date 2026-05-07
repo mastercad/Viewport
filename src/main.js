@@ -23,7 +23,9 @@ if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 }
 
 let mainWin = null;
-
+// Win32-Vollbild: kein setFullScreen() – stattdessen manuelle Bounds + alwaysOnTop,
+// damit die Taskleiste (HWND_TOPMOST) zuverlässig verdeckt wird.
+let _win32SavedBounds = null; // null = nicht im Vollbild; object = gespeicherte Bounds
 app.whenReady().then(() => {
   setupSession(session.fromPartition('persist:desktop', { cache: true }));
   initPushBridge();
@@ -127,23 +129,28 @@ function createMainWindow() {
   mainWin.on('resize', () => mainWin?.webContents.send('window:resized'));
 
   globalShortcut.register('F11', () => {
-    if (mainWin) mainWin.setFullScreen(!mainWin.isFullScreen());
+    if (!mainWin) return;
+    if (process.platform === 'win32') {
+      if (_win32SavedBounds) exitFullScreenWin32();
+      else enterFullScreenWin32();
+    } else {
+      mainWin.setFullScreen(!mainWin.isFullScreen());
+    }
   });
 
+  // Nur macOS / Linux – Windows nutzt enterFullScreenWin32 / exitFullScreenWin32
   mainWin.on('enter-full-screen', () => {
-    // Windows: Taskleiste hat HWND_TOPMOST-Status; ohne alwaysOnTop bleibt sie sichtbar.
-    if (process.platform === 'win32') mainWin?.setAlwaysOnTop(true, 'screen-saver');
     mainWin?.webContents.send('window:fullscreen', true);
-    globalShortcut.register('Escape', exitFullScreen); // nur im Vollbild, sonst stört Escape
+    globalShortcut.register('Escape', exitFullScreen);
   });
   mainWin.on('leave-full-screen', () => {
-    if (process.platform === 'win32') mainWin?.setAlwaysOnTop(false);
     globalShortcut.unregister('Escape');
     mainWin?.webContents.send('window:fullscreen', false);
   });
 
   mainWin.on('closed', () => {
     globalShortcut.unregisterAll();
+    _win32SavedBounds = null;
     mainWin = null;
   });
 }
@@ -225,7 +232,7 @@ ipcMain.handle('panel:setViewport', async (_e, { wvId, w, h, mobile, ua }) => {
 ipcMain.handle('workspace:getBounds', () => {
   if (!mainWin) return null;
   const [winW, winH] = mainWin.getContentSize();
-  const fullscreen    = mainWin.isFullScreen();
+  const fullscreen    = isEffectivelyFullScreen();
   const topOffset     = fullscreen ? 0 : 110;  // header 60 + device-bar 50
   const bottomOffset  = fullscreen ? 0 : 60;   // toolbar
   return { x: 0, y: topOffset, width: winW, height: winH - topOffset - bottomOffset };
@@ -256,7 +263,7 @@ ipcMain.handle('screenshot:capture-desktop-wv', async (_e, wvId) => {
   const wc = webContents.fromId(wvId);
   if (!wc || wc.isDestroyed() || !mainWin) return null;
   const [winW, winH] = mainWin.getContentSize();
-  const fullscreen   = mainWin.isFullScreen();
+  const fullscreen   = isEffectivelyFullScreen();
   const topOffset    = fullscreen ? 0 : 110;  // header 60 + device-bar 50
   const botOffset    = fullscreen ? 0 : 60;   // toolbar
   const captureH     = winH - topOffset;       // Workspace + Toolbar (= was der Benutzer sieht)
@@ -280,7 +287,13 @@ ipcMain.handle('screenshot:capture-desktop-wv', async (_e, wvId) => {
 });
 
 ipcMain.handle('window:setFullScreen', (_e, flag) => {
-  mainWin?.setFullScreen(!!flag);
+  if (!mainWin) return;
+  if (process.platform === 'win32') {
+    if (flag) enterFullScreenWin32();
+    else exitFullScreenWin32();
+  } else {
+    mainWin.setFullScreen(!!flag);
+  }
 });
 
 ipcMain.on('updater:install', () => {
@@ -384,6 +397,42 @@ ipcMain.handle('session:clearPush', async () => {
   return true;
 });
 
+/**
+ * Gibt zurück ob das Fenster effektiv im Vollbild-Modus ist –
+ * auf Windows via _win32SavedBounds, auf anderen Plattformen via isFullScreen().
+ */
+function isEffectivelyFullScreen() {
+  if (process.platform === 'win32') return _win32SavedBounds !== null;
+  return mainWin?.isFullScreen() ?? false;
+}
+
+/**
+ * Win32-Vollbild: setzt Bounds auf den gesamten Display-Bereich (inkl. Taskleiste)
+ * und hebt das Fenster per alwaysOnTop über HWND_TOPMOST-Fenster (Taskleiste).
+ */
+function enterFullScreenWin32() {
+  if (!mainWin || _win32SavedBounds) return;
+  _win32SavedBounds = mainWin.getBounds();
+  const display = screen.getDisplayMatching(_win32SavedBounds);
+  mainWin.setAlwaysOnTop(true, 'screen-saver');
+  mainWin.setBounds(display.bounds, false);
+  mainWin.webContents.send('window:fullscreen', true);
+  globalShortcut.register('Escape', exitFullScreenWin32);
+}
+
+/**
+ * Win32-Vollbild beenden: alwaysOnTop zurücksetzen, ursprüngliche Bounds wiederherstellen.
+ */
+function exitFullScreenWin32() {
+  if (!mainWin || !_win32SavedBounds) return;
+  mainWin.setAlwaysOnTop(false);
+  mainWin.setBounds(_win32SavedBounds, false);
+  _win32SavedBounds = null;
+  globalShortcut.unregister('Escape');
+  mainWin.webContents.send('window:fullscreen', false);
+}
+
 function exitFullScreen() {
-  if (mainWin?.isFullScreen()) mainWin.setFullScreen(false);
+  if (process.platform === 'win32') exitFullScreenWin32();
+  else if (mainWin?.isFullScreen()) mainWin.setFullScreen(false);
 }

@@ -107,9 +107,9 @@ describe('panels.js – HUD-Button "present" Toggle', () => {
  *
  * Außerdem: das relevante Escape-keydown-Fragment wird separat extrahiert.
  */
-function buildPresentLogic(state, applyDecoRect) {
-  // Die beiden Modul-Variablen + exitPanelPresent + zwei addEventListener-Aufrufe
-  const block = extractLines(
+function buildPresentLogic(state, applyDecoRect, togglePresentation = () => {}) {
+  // _presentationMode als lokale Variable + exitPanelPresent + zwei addEventListener-Aufrufe
+  const block = 'let _presentationMode = false;\n' + extractLines(
     appSrc,
     'let _presentedPanelId = null;',
     "window.addEventListener('ss:present-panel', e => {",
@@ -129,6 +129,7 @@ function buildPresentLogic(state, applyDecoRect) {
   p.decoEl.style.transform = \`translate(-50%, -50%) scale(\${scaleToFit})\`;
   p.decoEl.classList.add('presenting');
   document.body.classList.add('panel-presenting');
+  if (!_presentationMode) togglePresentation(true);
 });
 
 // Escape-keydown
@@ -136,9 +137,9 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && _presentedPanelId !== null) { e.preventDefault(); exitPanelPresent(); }
 });`;
 
-  // Im eval-Scope müssen state und applyDecoRect verfügbar sein
-  const fn = new Function('state', 'applyDecoRect', block);
-  fn(state, applyDecoRect);
+  // Im eval-Scope müssen state, applyDecoRect und togglePresentation verfügbar sein
+  const fn = new Function('state', 'applyDecoRect', 'togglePresentation', block);
+  fn(state, applyDecoRect, togglePresentation);
 }
 
 // ── Setup für die app.js-Tests ────────────────────────────────────────────────
@@ -272,5 +273,93 @@ describe('app.js – ss:present-panel / ss:exit-present-panel Handler', () => {
   it('ignoriert Escape wenn kein Panel präsentiert wird', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     expect(applyDecoRect).not.toHaveBeenCalled();
+  });
+});
+
+// ── C) Quell-Invarianten: Vollbild-Kopplung und Schließen-Absicherung ────────
+
+describe('Quell-Invarianten: Vollbild-Kopplung und Schließen-Absicherung', () => {
+  it('exitPanelPresent beendet Hauptfenster-Vollbild wenn _presentationMode aktiv', () => {
+    expect(appSrc).toContain('if (_presentationMode) togglePresentation(false)');
+  });
+
+  it('ss:present-panel aktiviert Hauptfenster-Vollbild wenn noch nicht aktiv', () => {
+    expect(appSrc).toContain('if (!_presentationMode) togglePresentation(true)');
+  });
+
+  it('removePanel dispatcht ss:exit-present-panel wenn Panel .presenting hat', () => {
+    const removeStart = panelsSrc.indexOf('export function removePanel(id)');
+    const removeEnd   = panelsSrc.indexOf('\nexport function openPreset');
+    expect(removeStart).toBeGreaterThan(-1);
+    const removeBlock = panelsSrc.slice(removeStart, removeEnd);
+    expect(removeBlock).toContain("classList.contains('presenting')");
+    expect(removeBlock).toContain("'ss:exit-present-panel'");
+  });
+
+  it('HUD-Close-Button fordert Bestätigung wenn Panel .presenting hat', () => {
+    expect(panelsSrc).toContain('window.confirm(');
+    const closeIdx  = panelsSrc.indexOf("case 'close':");
+    expect(closeIdx).toBeGreaterThan(-1);
+    const closePart = panelsSrc.slice(closeIdx, closeIdx + 400);
+    expect(closePart).toContain('confirm(');
+    expect(closePart).toContain("classList.contains('presenting')");
+  });
+});
+
+// ── D) Funktional: togglePresentation-Kopplung ────────────────────────────────
+
+describe('app.js – togglePresentation-Kopplung bei Panel-Präsentation', () => {
+  let mockState;
+  let applyDecoRect;
+  let togglePresentation;
+  let panelA;
+
+  function makePanel(id, h = 800) {
+    const decoEl = document.createElement('div');
+    decoEl.classList.add('panel-deco');
+    decoEl.dataset.id = id;
+    document.body.appendChild(decoEl);
+    return { rect: { h }, decoEl };
+  }
+
+  beforeEach(() => {
+    panelA = makePanel('a', 900);
+    mockState  = { panels: new Map([['a', panelA]]) };
+    applyDecoRect     = vi.fn();
+    togglePresentation = vi.fn();
+    buildPresentLogic(mockState, applyDecoRect, togglePresentation);
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('ss:present-panel ruft togglePresentation(true) auf um Vollbild zu aktivieren', () => {
+    window.dispatchEvent(new CustomEvent('ss:present-panel', { detail: { id: 'a' } }));
+    expect(togglePresentation).toHaveBeenCalledWith(true);
+  });
+
+  it('ss:present-panel ruft togglePresentation nur einmal auf', () => {
+    window.dispatchEvent(new CustomEvent('ss:present-panel', { detail: { id: 'a' } }));
+    expect(togglePresentation).toHaveBeenCalledTimes(1);
+  });
+
+  it('ss:exit-present-panel ohne aktive Präsentation ruft togglePresentation NICHT auf', () => {
+    window.dispatchEvent(new CustomEvent('ss:exit-present-panel'));
+    expect(togglePresentation).not.toHaveBeenCalled();
+  });
+
+  it('ss:present-panel und ss:exit-present-panel: Overlay wird erstellt und dann entfernt', () => {
+    window.dispatchEvent(new CustomEvent('ss:present-panel', { detail: { id: 'a' } }));
+    expect(document.getElementById('panel-present-overlay')).not.toBeNull();
+    window.dispatchEvent(new CustomEvent('ss:exit-present-panel'));
+    expect(document.getElementById('panel-present-overlay')).toBeNull();
+  });
+
+  it('ss:exit-present-panel entfernt .panel-presenting von body', () => {
+    window.dispatchEvent(new CustomEvent('ss:present-panel', { detail: { id: 'a' } }));
+    expect(document.body.classList.contains('panel-presenting')).toBe(true);
+    window.dispatchEvent(new CustomEvent('ss:exit-present-panel'));
+    expect(document.body.classList.contains('panel-presenting')).toBe(false);
   });
 });

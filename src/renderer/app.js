@@ -954,6 +954,8 @@ function exitPanelPresent() {
   _presentOverlay = null;
   document.body.classList.remove('panel-presenting');
   _presentedPanelId = null;
+  // Hauptfenster-Vollbild ebenfalls beenden, sofern es noch aktiv ist.
+  if (_presentationMode) togglePresentation(false);
 }
 
 window.addEventListener('ss:exit-present-panel', () => exitPanelPresent());
@@ -976,6 +978,8 @@ window.addEventListener('ss:present-panel', e => {
   p.decoEl.style.transform = `translate(-50%, -50%) scale(${scaleToFit})`;
   p.decoEl.classList.add('presenting');
   document.body.classList.add('panel-presenting');
+  // Hauptfenster-Vollbild aktivieren, damit die Geräteansicht den vollen Bildschirm nutzt.
+  if (!_presentationMode) togglePresentation(true);
 });
 
 function togglePresentation(force) {
