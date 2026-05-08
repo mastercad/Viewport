@@ -1019,6 +1019,10 @@ function wireShortcuts() {
     else if (_presentationMode)     togglePresentation(false);
   });
 
+  // Main-Prozess-Logs in die Renderer-DevTools spiegeln (nur für Diagnose).
+  // eslint-disable-next-line no-console
+  window.ss.onDebugLog?.(msg => console.log('%c[MAIN]', 'color:orange', msg));
+
   window.ss.onFullScreenChange(flag => {
     // wsRect + remap übernimmt der ResizeObserver automatisch wenn das DOM
     // nach dem Vollbild-Wechsel seine Größe ändert.

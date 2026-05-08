@@ -52,4 +52,7 @@ contextBridge.exposeInMainWorld('ss', {
 
   // Liefert die App-Versionsnummer aus package.json.
   appVersion: () => ipcRenderer.invoke('app:version'),
+
+  // Debug-Meldungen aus dem Main-Prozess in die Renderer-DevTools weiterleiten.
+  onDebugLog: (cb) => ipcRenderer.on('debug:log', (_e, msg) => cb(msg)),
 });

@@ -179,25 +179,104 @@ export async function addPanel(def, opts = {}) {
       const vh = ownDef._landscape ? ownDef._baseW : ownDef._baseH;
       window.ss.setViewport(wv.getWebContentsId(), vw, vh, { mobile, ua });
     }, { once: true });
+
+    // Scrollbalken in die emulierte Seite injizieren.
+    // Mobile-Emulation verwendet Chromium Overlay-Scrollbars (auto-hide) –
+    // ::-webkit-scrollbar erzwingt sichtbare Scrollbalken bei Überlauf.
+    wv.addEventListener('did-finish-load', () => {
+      wv.insertCSS([
+        '::-webkit-scrollbar { width: 8px; height: 8px; display: block; }',
+        '::-webkit-scrollbar-thumb { background: rgba(0,0,0,.40); border-radius: 4px; }',
+        '::-webkit-scrollbar-track { background: rgba(0,0,0,.06); }',
+      ].join('\n')).catch(() => {});
+    });
+
     if (mobile) {
       wv.addEventListener('did-finish-load', () => {
         wv.executeJavaScript(`(function(){
   if(window.__eTouchPf)return; window.__eTouchPf=1;
-  function mk(e){try{return new Touch({identifier:1,target:e.target,
-    clientX:e.clientX,clientY:e.clientY,screenX:e.screenX,screenY:e.screenY,
-    radiusX:1,radiusY:1,rotationAngle:0,force:1});}catch(x){return null;}}
+  var _touching=false, _startEl=null, _startX=0, _startY=0, _lastX=0, _lastY=0;
+  var _scrollEl=null, _isDrag=false;
+  var DRAG_THRESHOLD=5;
+
+  function findScrollable(el,axis){
+    while(el&&el!==document.documentElement){
+      var cs=getComputedStyle(el);
+      var ox=cs.overflowX, oy=cs.overflowY;
+      if(axis==='x'&&el.scrollWidth>el.clientWidth&&ox!=='hidden'&&ox!=='visible') return el;
+      if(axis==='y'&&el.scrollHeight>el.clientHeight&&oy!=='hidden'&&oy!=='visible') return el;
+      el=el.parentElement;
+    }
+    return document.documentElement;
+  }
+
+  function mk(src,tgt){
+    try{return new Touch({identifier:1,target:tgt,
+      clientX:src.clientX,clientY:src.clientY,
+      screenX:src.screenX,screenY:src.screenY,
+      radiusX:1,radiusY:1,rotationAngle:0,force:1});}
+    catch(x){return null;}
+  }
+
   document.addEventListener('mousedown',function(e){
     if(!e.isTrusted||e.button!==0)return;
-    var t=mk(e);if(!t)return;
+    _touching=true; _isDrag=false; _scrollEl=null;
+    _startEl=e.target; _startX=e.clientX; _startY=e.clientY;
+    _lastX=e.clientX; _lastY=e.clientY;
+    var t=mk(e,e.target); if(!t)return;
     e.target.dispatchEvent(new TouchEvent('touchstart',
       {bubbles:true,cancelable:true,touches:[t],targetTouches:[t],changedTouches:[t]}));
   },true);
+
+  document.addEventListener('mousemove',function(e){
+    if(!_touching||!_startEl)return;
+    var dx=e.clientX-_lastX, dy=e.clientY-_lastY;
+    var adx=Math.abs(e.clientX-_startX), ady=Math.abs(e.clientY-_startY);
+
+    if(!_isDrag&&(adx>DRAG_THRESHOLD||ady>DRAG_THRESHOLD)){
+      _isDrag=true;
+      /* Scroll-Achse bestimmen: welche Richtung dominiert */
+      _scrollEl=adx>=ady
+        ? findScrollable(_startEl,'x')
+        : findScrollable(_startEl,'y');
+    }
+
+    if(_isDrag&&_scrollEl){
+      _scrollEl.scrollLeft-=dx;
+      _scrollEl.scrollTop-=dy;
+    }
+
+    _lastX=e.clientX; _lastY=e.clientY;
+
+    var t=mk(e,_startEl); if(!t)return;
+    _startEl.dispatchEvent(new TouchEvent('touchmove',
+      {bubbles:true,cancelable:true,touches:[t],targetTouches:[t],changedTouches:[t]}));
+  },true);
+
   document.addEventListener('mouseup',function(e){
     if(!e.isTrusted||e.button!==0)return;
-    var t=mk(e);if(!t)return;
-    e.target.dispatchEvent(new TouchEvent('touchend',
+    var wasDrag=_isDrag;
+    var tgt=_startEl||e.target;
+    _touching=false; _isDrag=false; _scrollEl=null; _startEl=null;
+    var t=mk(e,tgt);
+    if(t) tgt.dispatchEvent(new TouchEvent('touchend',
       {bubbles:true,cancelable:true,touches:[],targetTouches:[],changedTouches:[t]}));
+    /* War ein Drag: verhindere das nachfolgende click-Event */
+    if(wasDrag){
+      document.addEventListener('click',function stopper(ev){
+        ev.stopPropagation(); ev.preventDefault();
+        document.removeEventListener('click',stopper,true);
+      },{capture:true,once:true});
+    }
   },true);
+
+  /* Mausrad horizontal (Shift+Wheel oder natives deltaX) */
+  document.addEventListener('wheel',function(e){
+    var dx=e.shiftKey?e.deltaY:e.deltaX;
+    if(!dx)return;
+    var el=findScrollable(e.target,'x');
+    el.scrollLeft+=dx; e.preventDefault();
+  },{passive:false});
 })()`).catch(()=>{});
       });
     }

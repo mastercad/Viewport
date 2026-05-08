@@ -24,39 +24,29 @@ if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 
 let mainWin = null;
 
-// Auf Windows reicht setFullScreen() allein nicht aus – die Taskleiste bleibt sichtbar,
-// weil das Fenster nicht in der Z-Order über der Taskleiste liegt.
-// setAlwaysOnTop(true, 'screen-saver') setzt das Fenster auf einen Level oberhalb der
-// Taskleiste (laut Electron-Doku: ab 'pop-up-menu' aufwärts über der Taskbar).
-// setKiosk hat sich in der Praxis auf Windows 10 als unzuverlässig erwiesen.
 function winIsFullScreen() {
   if (!mainWin) return false;
   return mainWin.isFullScreen();
 }
+
 function winEnterFullScreen() {
   if (!mainWin) return;
   if (process.platform === 'win32') {
-    mainWin.setAlwaysOnTop(true, 'screen-saver');
-    mainWin.setFullScreen(true);
-    mainWin.focus();
-    mainWin.webContents.send('window:fullscreen', true);
-    globalShortcut.register('Escape', exitFullScreen);
-  } else {
-    mainWin.setFullScreen(true);
-    // enter-full-screen event schickt das IPC und registriert Escape
+    mainWin.setMenuBarVisibility(false);
+  }
+  mainWin.setFullScreen(true);
+  if (process.platform === 'win32') {
+    setTimeout(() => {
+      if (!mainWin?.isFullScreen()) return;
+      mainWin.focus();
+    }, 500);
   }
 }
+
 function winExitFullScreen() {
   if (!mainWin) return;
-  if (process.platform === 'win32') {
-    mainWin.setAlwaysOnTop(false);
-    mainWin.setFullScreen(false);
-    globalShortcut.unregister('Escape');
-    mainWin.webContents.send('window:fullscreen', false);
-  } else {
-    mainWin.setFullScreen(false);
-    // leave-full-screen event schickt das IPC und deregistriert Escape
-  }
+  mainWin.setFullScreen(false);
+  if (process.platform === 'win32') mainWin.setMenuBarVisibility(true);
 }
 
 app.whenReady().then(() => {
@@ -127,6 +117,8 @@ function createMainWindow() {
     icon:  path.join(__dirname, 'assets', 'icon.png'),
     backgroundColor: '#f4f5f9',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    simpleFullScreen: false,
+    fullscreenable: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -171,7 +163,10 @@ function createMainWindow() {
     }
   });
 
-  // enter-full-screen / leave-full-screen feuern nur auf macOS/Linux (kein kiosk).
+  // enter-full-screen / leave-full-screen feuern auf allen Plattformen.
+  // setAlwaysOnTop wird auf Windows NACH dem Übergang gesetzt, weil der
+  // Fullscreen-Übergang die Z-Order zurücksetzt und setAlwaysOnTop davor
+  // wirkungslos wäre.
   mainWin.on('enter-full-screen', () => {
     mainWin?.webContents.send('window:fullscreen', true);
     globalShortcut.register('Escape', exitFullScreen);
@@ -249,6 +244,9 @@ ipcMain.handle('panel:setViewport', async (_e, { wvId, w, h, mobile, ua }) => {
     if (wc.debugger.isAttached()) {
       await wc.debugger.sendCommand('Emulation.setTouchEmulationEnabled', {
         enabled: true, maxTouchPoints: 5,
+      }).catch(() => {});
+      await wc.debugger.sendCommand('Emulation.setScrollbarsHidden', {
+        hidden: false,
       }).catch(() => {});
     }
   } else {

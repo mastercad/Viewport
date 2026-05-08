@@ -79,6 +79,9 @@ async function applyViewport(wc, { w, h, mobile, ua }) {
       await wc.debugger.sendCommand('Emulation.setTouchEmulationEnabled', {
         enabled: true, maxTouchPoints: 5,
       }).catch(() => {});
+      await wc.debugger.sendCommand('Emulation.setScrollbarsHidden', {
+        hidden: false,
+      }).catch(() => {});
       // setEmitTouchEventsForMouse wird NICHT verwendet – bricht Drag & Drop im Host-Renderer.
       // Touch-Support via JS-Polyfill (did-finish-load + executeJavaScript) in panels.js.
     }
@@ -351,13 +354,23 @@ describe('applyViewport() – mobile=true (iPhone / Android / Tablet)', () => {
     expect(commands).not.toContain('Emulation.setEmitTouchEventsForMouse');
   });
 
-  it('nur setTouchEmulationEnabled wird als CDP-Befehl gesendet (mobile)', async () => {
-    // Exakt ein CDP-Befehl für mobile Emulation: setTouchEmulationEnabled.
+  it('genau zwei CDP-Befehle werden gesendet (setTouchEmulationEnabled + setScrollbarsHidden)', async () => {
     const wc = makeMockWc({ initiallyAttached: false });
     await applyViewport(wc, { w: 360, h: 800, mobile: true, ua: 'UA' });
     const commands = wc.debugger.sendCommand.mock.calls.map(c => c[0]);
     expect(commands).toContain('Emulation.setTouchEmulationEnabled');
-    expect(commands).toHaveLength(1);
+    expect(commands).toContain('Emulation.setScrollbarsHidden');
+    expect(commands).toHaveLength(2);
+  });
+
+  it('REGRESSION: Emulation.setScrollbarsHidden mit hidden:false', async () => {
+    // Stellt sicher dass Scrollbalken trotz Mobile-Emulation sichtbar bleiben.
+    const wc = makeMockWc({ initiallyAttached: false });
+    await applyViewport(wc, { w: 360, h: 800, mobile: true, ua: 'UA' });
+    expect(wc.debugger.sendCommand).toHaveBeenCalledWith(
+      'Emulation.setScrollbarsHidden',
+      { hidden: false }
+    );
   });
 
   it('setTouchEmulationEnabled auch wenn debugger bereits attached war', async () => {
