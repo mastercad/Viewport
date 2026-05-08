@@ -24,16 +24,21 @@ if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 
 let mainWin = null;
 
-// Auf Windows ist setFullScreen() nur ein erweitertes Maximize – die Taskleiste
-// bleibt sichtbar. Kiosk-Modus deckt den gesamten Bildschirm ab (inkl. Taskbar).
+// Auf Windows reicht setFullScreen() allein nicht aus – die Taskleiste bleibt sichtbar,
+// weil das Fenster nicht in der Z-Order über der Taskleiste liegt.
+// setAlwaysOnTop(true, 'screen-saver') setzt das Fenster auf einen Level oberhalb der
+// Taskleiste (laut Electron-Doku: ab 'pop-up-menu' aufwärts über der Taskbar).
+// setKiosk hat sich in der Praxis auf Windows 10 als unzuverlässig erwiesen.
 function winIsFullScreen() {
   if (!mainWin) return false;
-  return process.platform === 'win32' ? mainWin.isKiosk() : mainWin.isFullScreen();
+  return mainWin.isFullScreen();
 }
 function winEnterFullScreen() {
   if (!mainWin) return;
   if (process.platform === 'win32') {
-    mainWin.setKiosk(true);
+    mainWin.setAlwaysOnTop(true, 'screen-saver');
+    mainWin.setFullScreen(true);
+    mainWin.focus();
     mainWin.webContents.send('window:fullscreen', true);
     globalShortcut.register('Escape', exitFullScreen);
   } else {
@@ -44,7 +49,8 @@ function winEnterFullScreen() {
 function winExitFullScreen() {
   if (!mainWin) return;
   if (process.platform === 'win32') {
-    mainWin.setKiosk(false);
+    mainWin.setAlwaysOnTop(false);
+    mainWin.setFullScreen(false);
     globalShortcut.unregister('Escape');
     mainWin.webContents.send('window:fullscreen', false);
   } else {
